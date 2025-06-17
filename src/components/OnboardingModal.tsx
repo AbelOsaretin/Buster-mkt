@@ -20,7 +20,7 @@ export function OnboardingModal() {
   useEffect(() => {
     if (!localStorage.getItem("hasCompletedOnboarding")) {
       setIsOpen(true);
-      setOnboardingTriggered(true); // Mark that onboarding logic tried to open the modal
+      setOnboardingTriggered(true);
       sdk.actions
         .ready()
         .catch((err) => console.error("SDK ready error:", err));
@@ -58,7 +58,7 @@ export function OnboardingModal() {
   const handleShare = async () => {
     try {
       await sdk.actions.composeCast({
-        text: "Just joined Policast! Predict public sentiments and earn BSTR tokens! 🚩",
+        text: "Just joined Policast! Predict public sentiments and earn BSTR tokens!",
         embeds: ["https://buster-mkt.vercel.app"],
       });
       setStep("done");

@@ -6,13 +6,40 @@
   },
   "frame": {
     "version": "1",
-    "name": "POLICAST PREDICTION MARKET",
+    "name": "POLICAST",
     "iconUrl": "https://buster-mkt.vercel.app/icon2.jpg",
     "homeUrl": "https://buster-mkt.vercel.app",
     "imageUrl": "https://buster-mkt.vercel.app/icon.jpg",
+    "castShareUrl": "https://buster-mkt.vercel.app/share",
     "buttonTitle": "Explore Markets🏪",
     "splashImageUrl": "https://buster-mkt.vercel.app/icon.jpg",
     "splashBackgroundColor": "#ffffff",
-    "webhookUrl": "https://buster-mkt.vercel.app/api/webhook"
+    "subtitle": "PREDICTION MARKET",
+    "description": "Bet on political news and policies",
+    "primaryCategory": "finance",
+    "tags": [
+      "polimarket",
+      "prediction market",
+      "airdrop",
+      "politics",
+      "farcaster"
+    ],
+    "tagline": "Bet on political markets",
+    "ogUrl": "https://buster-mkt.vercel.app",
+    "ogTitle": "POLICAST",
+    "ogDescription": "Bet on political news and policies",
+    "ogImage": "https://buster-mkt.vercel.app/icon.jpg",
+    "noindex": false,
+    "permissions": ["cast:read"],
+    "notifications": {
+      "enabled": true,
+      "categories": [
+        {
+          "id": "welcome",
+          "name": "Welcome Messages"
+        }
+      ]
+    },
+    "author": "Oxdev.base.eth"
   }
 }

@@ -17,6 +17,12 @@ import { MarketResolved } from "./market-resolved";
 import { MarketPending } from "./market-pending";
 import { MarketBuyInterface } from "./market-buy-interface";
 import { MarketSharesDisplay } from "./market-shares-display";
+import { sdk } from "@farcaster/frame-sdk";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faShareFromSquare,
+  faUpRightAndDownLeftFromCenter,
+} from "@fortawesome/free-solid-svg-icons";
 
 export interface Market {
   question: string;
@@ -65,11 +71,19 @@ export function MarketCard({ index, market }: MarketCardProps) {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://buster-mkt.vercel.app";
   const marketPageUrl = `${appUrl}/market/${index}/details`;
-  const warpcastShareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
-    `Check out this market on Buster Market: ${
-      marketData?.question || `Market ${index}`
-    }`
-  )}&embeds[]=${encodeURIComponent(marketPageUrl)}`;
+  const handleShare = async () => {
+    try {
+      await sdk.actions.composeCast({
+        text: `Check out this market on Buster Market: ${
+          marketData?.question || `Market ${index}`
+        }`,
+        embeds: [marketPageUrl],
+      });
+    } catch (error) {
+      console.error("Failed to compose cast:", error);
+      // Optionally, show a toast notification to the user
+    }
+  };
 
   return (
     <Card key={index} className="flex flex-col">
@@ -112,18 +126,12 @@ export function MarketCard({ index, market }: MarketCardProps) {
         )}
         <div className="flex items-center space-x-2">
           <Button
-            asChild
             variant="outline"
             size="sm"
             className="border border-gray-300 hover:bg-gray-100 hover:text-gray-900 rounded-md px-4 py-2 transition-colors"
+            onClick={handleShare}
           >
-            <a
-              href={warpcastShareUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Share
-            </a>
+            <FontAwesomeIcon icon={faShareFromSquare} />
           </Button>
           <Button
             asChild
@@ -132,7 +140,9 @@ export function MarketCard({ index, market }: MarketCardProps) {
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-md px-4 py-2 transition-colors"
           >
             <Link href={`/market/${index}/details`} legacyBehavior>
-              View
+              <a>
+                <FontAwesomeIcon icon={faUpRightAndDownLeftFromCenter} />
+              </a>
             </Link>
           </Button>
         </div>

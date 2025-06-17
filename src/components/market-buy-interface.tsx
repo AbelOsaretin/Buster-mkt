@@ -16,7 +16,7 @@ import {
   tokenAddress,
   tokenAbi,
 } from "@/constants/contract";
-import { Loader2, Share2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { sdk } from "@farcaster/frame-sdk";

@@ -5,6 +5,7 @@ import { Home, Clock, Trophy, User, Info } from "lucide-react"; // Icons for tab
 import { usePathname, useSearchParams } from "next/navigation"; // Import useSearchParams
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { sdk } from "@farcaster/frame-sdk"; // Add this import
 
 export function Footer() {
   //eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -32,6 +33,24 @@ export function Footer() {
     }
   };
 
+  // Add the buy handler and token constants
+  const USDC_CAIP19 =
+    "eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const CAIP_ETH = "eip155:8453/native";
+  const BUSTER_CAIP19 =
+    "eip155:8453/erc20:0x53Bd7F868764333de01643ca9102ee4297eFA3cb";
+
+  const handleBuyBuster = async (sellToken: string) => {
+    try {
+      await sdk.actions.swapToken({
+        sellToken,
+        buyToken: BUSTER_CAIP19,
+      });
+    } catch (error) {
+      console.error("Failed to open swap:", error);
+    }
+  };
+
   return (
     <div className="relative">
       {/* About Panel for Mobile - positioned absolutely above the footer */}
@@ -54,6 +73,22 @@ export function Footer() {
                 <li>Browse available predictions</li>
                 <li>Place your bets!</li>
               </ol>
+              {/* --- Add Buy $Buster Buttons Here --- */}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => handleBuyBuster(USDC_CAIP19)}
+                  className="bg-[#7A42B9] text-white px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200"
+                >
+                  Buy $Buster with USDC
+                </button>
+                <button
+                  onClick={() => handleBuyBuster(CAIP_ETH)}
+                  className="bg-[#7A42B9] text-white px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200"
+                >
+                  Buy $Buster with ETH
+                </button>
+              </div>
+              {/* --- End Buy $Buster Buttons --- */}
             </div>
           </div>
         </div>

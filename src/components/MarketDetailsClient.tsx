@@ -65,6 +65,9 @@ export function MarketDetailsClient({
   useEffect(() => {
     const signalReady = async () => {
       await sdk.actions.ready();
+      (async () => {
+        await sdk.actions.addFrame();
+      })();
       console.log("MarketDetailsClient: Mini App signaled ready.");
     };
     signalReady();

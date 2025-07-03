@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 export function OnboardingModal() {
   const [step, setStep] = useState<"add" | "buy" | "share" | "done">("add");
   const [isOpen, setIsOpen] = useState(false);
-  // To track if the modal was opened by the onboarding logic in the current session
+  // To track if the modal was opened by the onboarding logic in the current sessio
   const [onboardingTriggered, setOnboardingTriggered] = useState(false);
 
   useEffect(() => {

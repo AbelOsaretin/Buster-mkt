@@ -231,6 +231,9 @@ export function EnhancedPredictionMarketDashboard() {
 
   useEffect(() => {
     if (!isLoadingMarketCount) sdk.actions.ready();
+    (async () => {
+      await sdk.actions.addFrame();
+    })();
   }, [isLoadingMarketCount]);
 
   const skeletonCards = Array.from({ length: 6 }, (_, i) => (

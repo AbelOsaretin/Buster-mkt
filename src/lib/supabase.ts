@@ -14,10 +14,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Check if Supabase is properly configured
 export const isSupabaseConfigured = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   return (
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://placeholder.supabase.co"
+    url &&
+    key &&
+    url !== "https://placeholder.supabase.co" &&
+    key !== "placeholder-key" &&
+    url.includes("supabase.co") &&
+    key.length > 20 // Basic validation for real key
   );
 };
 

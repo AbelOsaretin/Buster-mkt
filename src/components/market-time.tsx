@@ -39,11 +39,11 @@ export default function MarketTime({ endTime, className }: MarketTimeProps) {
     return (
       <div
         className={cn(
-          "text-xs px-2 py-1 rounded-md bg-gradient-to-r from-red-100 to-red-200 text-red-800 border border-red-300 flex items-center shadow-sm w-fit",
+          "text-xs px-2 py-1 rounded-md bg-gradient-to-r from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30 text-red-800 dark:text-red-200 border border-red-300 dark:border-red-700 flex items-center shadow-sm w-fit",
           className
         )}
       >
-        <span className="h-1.5 w-1.5 bg-red-500 animate-pulse rounded-full mr-1.5"></span>
+        <span className="h-1.5 w-1.5 bg-red-500 dark:bg-red-400 animate-pulse rounded-full mr-1.5"></span>
         <span className="font-medium">Ended</span>
       </div>
     );
@@ -52,12 +52,16 @@ export default function MarketTime({ endTime, className }: MarketTimeProps) {
   return (
     <div
       className={cn(
-        "text-xs px-2 py-1 rounded-md bg-gradient-to-r from-green-50 to-green-100 border border-green-200 flex items-center shadow-sm w-fit",
+        "text-xs px-2 py-1 rounded-md bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border border-green-200 dark:border-green-700 flex items-center shadow-sm w-fit",
         className
       )}
     >
-      <span className="text-green-500 font-medium mr-1.5">⏱</span>
-      <span className="text-green-600 font-medium mr-1.5">Ends:</span>
+      <span className="text-green-500 dark:text-green-400 font-medium mr-1.5">
+        ⏱
+      </span>
+      <span className="text-green-600 dark:text-green-300 font-medium mr-1.5">
+        Ends:
+      </span>
       {timeLeft.days > 0 && <TimeUnit value={timeLeft.days} unit="d" />}
       <TimeUnit value={timeLeft.hours} unit="h" />
       <TimeUnit value={timeLeft.minutes} unit="m" />
@@ -76,9 +80,9 @@ const TimeUnit = ({
   isLast?: boolean;
 }) => (
   <span className={cn("flex items-center", !isLast && "mr-1")}>
-    <span className="font-bold text-grey-800">
+    <span className="font-bold text-gray-800 dark:text-gray-200">
       {String(value).padStart(2, "0")}
     </span>
-    <span className="text-grey-500">{unit}</span>
+    <span className="text-gray-500 dark:text-gray-400">{unit}</span>
   </span>
 );

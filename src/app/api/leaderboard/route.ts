@@ -95,7 +95,13 @@ export async function GET() {
   const cachedLeaderboard = cache.get<LeaderboardEntry[]>(CACHE_KEY);
   if (cachedLeaderboard) {
     console.log("✅ Serving from cache");
-    return NextResponse.json(cachedLeaderboard);
+    // Ensure no BigInt values in cached data by re-serializing
+    const safeLeaderboard = JSON.parse(
+      JSON.stringify(cachedLeaderboard, (key, value) =>
+        typeof value === "bigint" ? Number(value) : value
+      )
+    );
+    return NextResponse.json(safeLeaderboard);
   }
 
   try {
@@ -161,7 +167,7 @@ export async function GET() {
       .map((entry) => ({
         address: entry.user.toLowerCase(),
         winnings: Number(entry.totalWinnings) / Math.pow(10, tokenDecimals),
-        voteCount: entry.voteCount,
+        voteCount: Number(entry.voteCount), // Ensure voteCount is also a number
       }));
 
     console.log("📬 Fetching Farcaster users...");
@@ -209,17 +215,31 @@ export async function GET() {
       .slice(0, 10);
 
     console.log("🏆 Final Leaderboard:", leaderboard);
-    cache.set(CACHE_KEY, leaderboard);
+
+    // Ensure no BigInt values before caching and returning
+    const safeLeaderboard = JSON.parse(
+      JSON.stringify(leaderboard, (key, value) =>
+        typeof value === "bigint" ? Number(value) : value
+      )
+    );
+
+    cache.set(CACHE_KEY, safeLeaderboard);
     console.log("✅ Cached leaderboard");
 
-    return NextResponse.json(leaderboard);
+    return NextResponse.json(safeLeaderboard);
   } catch (error) {
     console.error("❌ Leaderboard fetch error:", error);
 
     const cachedLeaderboard = cache.get<LeaderboardEntry[]>(CACHE_KEY);
     if (cachedLeaderboard) {
       console.log("✅ Serving cached leaderboard due to error");
-      return NextResponse.json(cachedLeaderboard);
+      // Ensure no BigInt values in cached data
+      const safeLeaderboard = JSON.parse(
+        JSON.stringify(cachedLeaderboard, (key, value) =>
+          typeof value === "bigint" ? Number(value) : value
+        )
+      );
+      return NextResponse.json(safeLeaderboard);
     }
 
     return NextResponse.json(

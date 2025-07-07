@@ -176,63 +176,52 @@ export async function GET(request: NextRequest) {
   );
 
   if (!marketId || isNaN(Number(marketId))) {
-    console.error("Market Image API: Invalid or missing marketId");
+    console.error(`Market Image API: Invalid marketId: ${marketId}`);
     return new NextResponse("Invalid market ID", { status: 400 });
   }
 
   try {
-    const market = await fetchMarketData(marketId);
-
-    const total = market.totalOptionAShares + market.totalOptionBShares;
-    const optionAPercentNum =
-      total > 0n
-        ? Number((market.totalOptionAShares * 10000n) / total) / 100
-        : 50;
-    const optionBPercentNum =
-      total > 0n
-        ? Number((market.totalOptionBShares * 10000n) / total) / 100
-        : 50;
-
-    const optionAPercentDisplay = optionAPercentNum.toFixed(1);
-    const optionBPercentDisplay = optionBPercentNum.toFixed(1);
-
-    const timeStatus = formatTimeStatus(market.endTime);
-
-    console.log(
-      `Market Image API: Generating image for marketId ${marketId} with percentages: ${optionAPercentDisplay}% / ${optionBPercentDisplay}%`
-    );
-
     const [regularFontData, boldFontData, mediumFontData] = await Promise.all([
       regularFontDataPromise,
       boldFontDataPromise,
-      mediumFontDataPromise,
+      mediumFontDataPromise.catch(() => null),
     ]);
 
-    let statusText = "Active";
-    let statusColor = colors.primary;
+    console.log(
+      `Market Image API: Successfully loaded fonts for marketId ${marketId}`
+    );
 
-    if (market.resolved) {
-      statusText = "Resolved";
-      statusColor = colors.success;
-    } else if (timeStatus.isEnded) {
-      statusText = "Unresolved";
-      statusColor = colors.danger;
-    }
+    const market = await fetchMarketData(marketId);
+    console.log(
+      `Market Image API: Market data processed for marketId ${marketId}:`,
+      market
+    );
 
-    let optionAColor = colors.primary;
-    let optionBColor = colors.secondary;
+    const total = market.totalOptionAShares + market.totalOptionBShares;
+    const aPercentage =
+      total > 0n ? Number((market.totalOptionAShares * 100n) / total) : 50;
+    const bPercentage =
+      total > 0n ? Number((market.totalOptionBShares * 100n) / total) : 50;
 
-    if (market.resolved) {
-      if (market.outcome === 1) {
-        optionAColor = colors.success;
-        optionBColor = colors.text.light;
-      } else {
-        optionAColor = colors.text.light;
-        optionBColor = colors.success;
-      }
-    }
+    const timeStatus = formatTimeStatus(market.endTime);
 
-    const svg = await satori(
+    // Truncate long questions and adjust font sizes
+    const truncateText = (text: string, maxLength: number) => {
+      return text.length > maxLength
+        ? text.substring(0, maxLength) + "..."
+        : text;
+    };
+
+    const questionText = truncateText(market.question, 120);
+    const optionAText = truncateText(market.optionA, 40);
+    const optionBText = truncateText(market.optionB, 40);
+
+    // Dynamic font sizing based on question length
+    const questionFontSize =
+      market.question.length > 80 ? 28 : market.question.length > 50 ? 32 : 36;
+    const optionFontSize = 18;
+
+    const jsx = (
       <div
         style={{
           display: "flex",
@@ -240,443 +229,318 @@ export async function GET(request: NextRequest) {
           width: "1170px",
           height: "680px",
           backgroundColor: colors.background,
-          color: colors.text.primary,
-          fontFamily: '"Inter"',
-          padding: "0px",
-          position: "relative",
-          overflow: "hidden",
+          padding: "40px",
+          fontFamily: "Inter",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            backgroundImage:
-              "radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.05) 0%, transparent 30%), radial-gradient(circle at 90% 80%, rgba(124, 58, 237, 0.05) 0%, transparent 30%)",
-            zIndex: 0,
-          }}
-        />
+        {/* Header with gradient */}
         <div
           style={{
             display: "flex",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "180px",
-            backgroundImage: colors.gradient.header,
-            zIndex: 0,
-          }}
-        />
-        <div
-          style={{
-            display: "flex",
-            margin: "50px",
-            padding: "40px",
-            backgroundColor: colors.cardBg,
-            borderRadius: "28px",
-            boxShadow: colors.shadow,
-            flexDirection: "column",
-            height: "536px",
-            zIndex: 1,
-            position: "relative",
-            overflow: "hidden",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "30px",
+            padding: "20px 30px",
+            background: colors.gradient.header,
+            borderRadius: "16px",
+            color: "white",
           }}
         >
           <div
             style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "8px",
-              backgroundImage: colors.gradient.primary,
-              zIndex: 2,
+              display: "flex",
+              alignItems: "center",
+              fontSize: "24px",
+              fontWeight: "bold",
             }}
-          />
+          >
+            🎯 Buster Market
+          </div>
+          <div
+            style={{
+              fontSize: "16px",
+              opacity: 0.9,
+            }}
+          >
+            Market #{marketId}
+          </div>
+        </div>
+
+        {/* Main content area */}
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            flexDirection: "column",
+            backgroundColor: colors.cardBg,
+            borderRadius: "20px",
+            padding: "35px",
+            border: `2px solid ${colors.border}`,
+            position: "relative",
+          }}
+        >
+          {/* Question - with dynamic font size */}
+          <div
+            style={{
+              fontSize: `${questionFontSize}px`,
+              fontWeight: "bold",
+              color: colors.text.primary,
+              marginBottom: "25px",
+              lineHeight: 1.3,
+              wordWrap: "break-word",
+              hyphens: "auto",
+            }}
+          >
+            {questionText}
+          </div>
+
+          {/* Status and time info */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              marginBottom: "30px",
+              gap: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "8px 16px",
+                backgroundColor: market.resolved
+                  ? "#dcfce7"
+                  : timeStatus.isEnded
+                  ? "#fef3c7"
+                  : "#dbeafe",
+                color: market.resolved
+                  ? "#166534"
+                  : timeStatus.isEnded
+                  ? "#92400e"
+                  : "#1e40af",
+                borderRadius: "12px",
+                fontSize: "14px",
+                fontWeight: "600",
+              }}
+            >
+              {market.resolved ? "🏆 Resolved" : timeStatus.text}
+            </div>
+          </div>
+
+          {/* Options with progress bars */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+              flex: 1,
+            }}
+          >
+            {/* Option A */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: `${optionFontSize}px`,
+                    fontWeight: "600",
+                    color: colors.text.primary,
+                  }}
+                >
+                  {optionAText}
+                </span>
+                <span
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: "bold",
+                    color: colors.primary,
+                  }}
+                >
+                  {aPercentage}%
+                </span>
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "12px",
+                  backgroundColor: "#e5e7eb",
+                  borderRadius: "6px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${aPercentage}%`,
+                    height: "100%",
+                    background: colors.gradient.primary,
+                    borderRadius: "6px",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Option B */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: `${optionFontSize}px`,
+                    fontWeight: "600",
+                    color: colors.text.primary,
+                  }}
+                >
+                  {optionBText}
+                </span>
+                <span
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: "bold",
+                    color: colors.secondary,
+                  }}
+                >
+                  {bPercentage}%
+                </span>
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "12px",
+                  backgroundColor: "#e5e7eb",
+                  borderRadius: "6px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${bPercentage}%`,
+                    height: "100%",
+                    backgroundColor: colors.secondary,
+                    borderRadius: "6px",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer stats */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              width: "100%",
-              marginBottom: "12px",
+              marginTop: "25px",
+              padding: "20px",
+              background: colors.gradient.footer,
+              borderRadius: "12px",
+              border: `1px solid ${colors.border}`,
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-              }}
-            >
+            <div style={{ textAlign: "center" }}>
               <div
                 style={{
-                  display: "flex",
-                  fontSize: "31px",
-                  fontWeight: 800,
-                  color: colors.primary,
-                  letterSpacing: "-0.5px",
+                  fontSize: "14px",
+                  color: colors.text.secondary,
+                  marginBottom: "4px",
                 }}
               >
-                POLICAST
+                Total Volume
               </div>
               <div
                 style={{
-                  display: "flex",
-                  backgroundColor: statusColor,
-                  color: "white",
-                  padding: "8px 20px",
-                  borderRadius: "18px",
                   fontSize: "18px",
-                  fontWeight: 600,
-                  boxShadow: `0 2px 4px ${statusColor}80`,
+                  fontWeight: "bold",
+                  color: colors.text.primary,
                 }}
               >
-                {statusText}
+                {(Number(total) / 10 ** 18).toLocaleString()} Buster
               </div>
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                backgroundColor:
-                  !timeStatus.isEnded && !market.resolved
-                    ? colors.primary
-                    : colors.text.light,
-                color: "white",
-                padding: "8px 20px",
-                borderRadius: "18px",
-                fontSize: "18px",
-                fontWeight: 600,
-                boxShadow: `0 2px 4px ${
-                  !timeStatus.isEnded && !market.resolved
-                    ? `${colors.primary}80`
-                    : `${colors.text.light}80`
-                }`,
-              }}
-            >
-              {timeStatus.text}
-            </div>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              fontSize: "16px",
-              color: colors.text.light,
-              marginBottom: "30px",
-              justifyContent: "flex-start",
-            }}
-          >
-            ID: {marketId}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              flexGrow: 1,
-              justifyContent: "center",
-              padding: "0 25px",
-            }}
-          >
-            <h1
-              style={{
-                display: "flex",
-                fontSize: "52px",
-                fontWeight: 800,
-                textAlign: "center",
-                marginBottom: "50px",
-                lineHeight: 1.2,
-                color: colors.text.primary,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              {market.question}
-            </h1>
-            <div
-              style={{
-                display: "flex",
-                width: "95%",
-                flexDirection: "column",
-                gap: "26px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}
-              >
+            {market.resolved && (
+              <div style={{ textAlign: "center" }}>
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    fontSize: "14px",
+                    color: colors.text.secondary,
+                    marginBottom: "4px",
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: "26px",
-                      fontWeight: 700,
-                      color: optionAColor,
-                    }}
-                  >
-                    {market.optionA}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: "26px",
-                      fontWeight: 700,
-                      color: optionAColor,
-                    }}
-                  >
-                    {optionAPercentDisplay}%
-                  </div>
+                  Winner
                 </div>
                 <div
                   style={{
-                    display: "flex",
-                    width: "100%",
-                    height: "14px",
-                    backgroundColor: `${colors.border}`,
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.05)",
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    color: colors.success,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      width: `${optionAPercentNum}%`,
-                      height: "100%",
-                      backgroundImage:
-                        market.resolved && market.outcome === 1
-                          ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
-                          : "linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                    }}
-                  />
+                  {market.outcome === 1 ? "Option A" : "Option B"}
                 </div>
-                {market.resolved && market.outcome === 1 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      color: colors.success,
-                      fontSize: "18px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M8 0C3.6 0 0 3.6 0 8C0 12.4 3.6 16 8 16C12.4 16 16 12.4 16 8C16 3.6 12.4 0 8 0ZM7 11.4L3.6 8L5 6.6L7 8.6L11 4.6L12.4 6L7 11.4Z"
-                        fill="#059669"
-                      />
-                    </svg>
-                    Winner
-                  </div>
-                )}
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: "26px",
-                      fontWeight: 700,
-                      color: optionBColor,
-                    }}
-                  >
-                    {market.optionB}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      fontSize: "26px",
-                      fontWeight: 700,
-                      color: optionBColor,
-                    }}
-                  >
-                    {optionBPercentDisplay}%
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    width: "100%",
-                    height: "14px",
-                    backgroundColor: `${colors.border}`,
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.05)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      width: `${optionBPercentNum}%`,
-                      height: "100%",
-                      backgroundImage:
-                        market.resolved && market.outcome === 2
-                          ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
-                          : "linear-gradient(90deg, #7c3aed 0%, #8b5cf6 100%)",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                    }}
-                  />
-                </div>
-                {market.resolved && market.outcome === 2 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      color: colors.success,
-                      fontSize: "18px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M8 0C3.6 0 0 3.6 0 8C0 12.4 3.6 16 8 16C12.4 16 16 12.4 16 8C16 3.6 12.4 0 8 0ZM7 11.4L3.6 8L5 6.6L7 8.6L11 4.6L12.4 6L7 11.4Z"
-                        fill="#059669"
-                      />
-                    </svg>
-                    Winner
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              marginTop: "32px",
-              paddingTop: "20px",
-              borderTop: `1px solid ${colors.border}`,
-              backgroundImage: colors.gradient.footer,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                fontSize: "21px",
-                color: colors.text.secondary,
-                alignItems: "center",
-                gap: "14px",
-              }}
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
-                  stroke="#4b5563"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M12 6V12L16 14"
-                  stroke="#4b5563"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Last updated: {format(new Date(), "MMM d, yyyy")}
-            </div>
+            )}
           </div>
         </div>
-      </div>,
-      {
-        width: 1170,
-        height: 680,
-        fonts: [
-          {
-            name: "Inter",
-            data: regularFontData,
-            weight: 400 as const,
-            style: "normal" as const,
-          },
-          {
-            name: "Inter",
-            data: boldFontData,
-            weight: 700 as const,
-            style: "normal" as const,
-          },
-          ...(mediumFontData
-            ? [
-                {
-                  name: "Inter",
-                  data: mediumFontData,
-                  weight: 500 as const,
-                  style: "normal" as const,
-                },
-              ]
-            : []),
-        ],
-      }
+      </div>
     );
 
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .png({ quality: 90 })
-      .toBuffer();
+    const svg = await satori(jsx, {
+      width: 1170,
+      height: 680,
+      fonts: [
+        {
+          name: "Inter",
+          data: regularFontData,
+          weight: 400 as const,
+          style: "normal",
+        },
+        {
+          name: "Inter",
+          data: boldFontData,
+          weight: 700 as const,
+          style: "normal",
+        },
+        ...(mediumFontData
+          ? [
+              {
+                name: "Inter",
+                data: mediumFontData,
+                weight: 500 as const,
+                style: "normal" as const,
+              },
+            ]
+          : []),
+      ],
+    });
+
+    const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
     console.log(
-      `Market Image API: Successfully generated PNG for marketId ${marketId}`
+      `Market Image API: Successfully generated image for marketId ${marketId}`
     );
 
-    return new NextResponse(new Blob([new Uint8Array(pngBuffer)]), {
-      status: 200,
+    return new NextResponse(new Uint8Array(pngBuffer), {
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=300",
-        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=300, s-maxage=300",
       },
     });
   } catch (error) {
     console.error(
-      `Market Image API: Overall failure for marketId ${marketId}:`,
+      `Market Image API: Error generating image for marketId ${marketId}:`,
       error
     );
-    return new NextResponse("Failed to generate image", { status: 500 });
+    return new NextResponse("Error generating image", { status: 500 });
   }
 }

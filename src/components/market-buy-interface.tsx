@@ -86,6 +86,9 @@ export function MarketBuyInterface({
   const [isApproving, setIsApproving] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastProcessedHash, setLastProcessedHash] = useState<string | null>(
+    null
+  );
   // Wagmi hooks for reading token data
   const { data: tokenSymbolData, error: tokenSymbolError } = useReadContract({
     address: tokenAddress,
@@ -208,6 +211,7 @@ export function MarketBuyInterface({
       setSelectedOption(null);
       setAmount("");
       setError(null);
+      setLastProcessedHash(null);
       setIsVisible(true);
     }, 200);
   }, [
@@ -256,8 +260,9 @@ export function MarketBuyInterface({
         return;
       }
 
-      // Proceed based on allowance
-      setBuyingStep(amountInUnits > userAllowance ? "allowance" : "confirm");
+      // Proceed based on allowance with a small buffer for precision
+      const needsApproval = amountInUnits > userAllowance;
+      setBuyingStep(needsApproval ? "allowance" : "confirm");
       setError(null);
     } catch (error) {
       console.error("Allowance check error:", error);
@@ -295,11 +300,7 @@ export function MarketBuyInterface({
         ],
       });
 
-      toast({
-        title: "Approval Successful",
-        description: `Approval transaction sent. Waiting for confirmation...`,
-        duration: 3000,
-      });
+      // Don't show toast here - let the useEffect handle it after confirmation
     } catch (error: unknown) {
       console.error("Approval error:", error);
       // More descriptive error message
@@ -363,13 +364,7 @@ export function MarketBuyInterface({
         ],
       });
 
-      toast({
-        title: "Purchase Successful!",
-        description: `You bought ${amount} ${
-          selectedOption === "A" ? market.optionA : market.optionB
-        } shares`,
-        duration: 5000,
-      });
+      // Don't show toast here - let the useEffect handle it after confirmation
     } catch (error: unknown) {
       console.error("Purchase error:", error);
       let errorMessage = "Failed to process purchase. Check your wallet.";
@@ -393,17 +388,35 @@ export function MarketBuyInterface({
     }
   };
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://buster-mkt.vercel.app";
-  const marketPageUrl = `${appUrl}/market/${marketId}/details`;
-
   const handleShareAfterPurchase = async () => {
     try {
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL || "https://buster-mkt.vercel.app";
+      const marketPageUrl = `${appUrl}/market/${marketId}/details`;
+      const imageUrl = `${appUrl}/api/market-image?marketId=${marketId}`;
+
+      // Create mini app embed format
+      const miniAppEmbed = {
+        version: "next" as const,
+        imageUrl: imageUrl,
+        button: {
+          title: "View Market Details",
+          action: {
+            type: "launch_frame" as const,
+            name: market?.question?.substring(0, 30) || `Market ${marketId}`,
+            url: marketPageUrl,
+            iconUrl: "https://buster-mkt.vercel.app/icon.png",
+            splashImageUrl: "https://buster-mkt.vercel.app/icon.jpg",
+            splashBackgroundColor: "#131E2A",
+          },
+        },
+      };
+
       await sdk.actions.composeCast({
         text: `I just bought shares in this market on Buster Market: ${
           market?.question || `Market ${marketId}`
         }`,
-        embeds: [marketPageUrl],
+        embeds: [JSON.stringify(miniAppEmbed)],
       });
     } catch (error) {
       console.error("Failed to compose cast after purchase:", error);
@@ -417,23 +430,32 @@ export function MarketBuyInterface({
   };
   // Effect to handle transaction confirmation
   useEffect(() => {
-    if (isTxConfirmed) {
-      toast({
-        title: "Transaction Confirmed!",
-        description: `Your ${
-          buyingStep === "allowance" ? "approval" : "purchase"
-        } was successful.`,
-        duration: 5000,
-      });
+    if (isTxConfirmed && hash && hash !== lastProcessedHash) {
+      setLastProcessedHash(hash);
+
       if (buyingStep === "allowance") {
-        refetchAllowance(); // Refetch allowance after successful approval
-        setBuyingStep("confirm");
+        toast({
+          title: "Approval Confirmed!",
+          description: "Token spending approved successfully.",
+          duration: 3000,
+        });
+        // Refetch allowance and proceed to confirm step
+        refetchAllowance().then(() => {
+          setBuyingStep("confirm");
+          setIsApproving(false);
+        });
       } else if (buyingStep === "confirm") {
-        refetchBalance(); // Refetch balance after successful purchase
-        setBuyingStep("purchaseSuccess"); // Move to success/share step
+        toast({
+          title: "Purchase Confirmed!",
+          description: "Your shares have been purchased successfully.",
+          duration: 3000,
+        });
+        // Refetch balance and proceed to success step
+        refetchBalance().then(() => {
+          setBuyingStep("purchaseSuccess");
+          setIsConfirming(false);
+        });
       }
-      setIsApproving(false);
-      setIsConfirming(false);
     }
     if (txError || writeError) {
       const errorToShow = txError || writeError;
@@ -449,11 +471,12 @@ export function MarketBuyInterface({
     }
   }, [
     isTxConfirmed,
+    hash,
+    lastProcessedHash,
     txError,
     writeError,
     buyingStep,
     toast,
-    handleCancel,
     refetchAllowance,
     refetchBalance,
   ]);

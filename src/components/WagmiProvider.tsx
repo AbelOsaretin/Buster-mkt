@@ -4,12 +4,21 @@ import React from "react"; // Import React
 import { WagmiConfig, createConfig, http } from "wagmi";
 import { base } from "wagmi/chains";
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
+import { metaMask } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const wagmiConfig = createConfig({
   chains: [base],
   transports: { [base.id]: http(process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL) },
-  connectors: [farcasterFrame()],
+  connectors: [
+    farcasterFrame(),
+    metaMask({
+      dappMetadata: {
+        name: "Buster Market",
+        url: typeof window !== "undefined" ? window.location.origin : "",
+      },
+    }),
+  ],
 });
 
 const queryClient = new QueryClient();

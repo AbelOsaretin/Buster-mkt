@@ -76,6 +76,7 @@ export function Navbar() {
 
     const primaryConnector =
       validConnectors.find((c) => c.id === "farcasterFrame") ||
+      validConnectors.find((c) => c.id === "metaMask") ||
       (validConnectors.length > 0 ? validConnectors[0] : undefined);
 
     if (wagmiIsConnected && address) {

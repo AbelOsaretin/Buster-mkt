@@ -22,18 +22,29 @@ const calculateTimeLeft = (endTime: bigint) => {
 };
 
 export default function MarketTime({ endTime, className }: MarketTimeProps) {
-  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft(endTime));
+  const [timeLeft, setTimeLeft] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  });
+  const [isClient, setIsClient] = useState(false);
   const isEnded = new Date(Number(endTime) * 1000) < new Date();
 
   useEffect(() => {
-    if (isEnded) return;
+    setIsClient(true);
+    setTimeLeft(calculateTimeLeft(endTime));
+  }, [endTime]);
+
+  useEffect(() => {
+    if (!isClient || isEnded) return;
 
     const timer = setInterval(() => {
       setTimeLeft(calculateTimeLeft(endTime));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [endTime, isEnded]);
+  }, [endTime, isEnded, isClient]);
 
   if (isEnded) {
     return (
@@ -45,6 +56,27 @@ export default function MarketTime({ endTime, className }: MarketTimeProps) {
       >
         <span className="h-1.5 w-1.5 bg-red-500 dark:bg-red-400 animate-pulse rounded-full mr-1.5"></span>
         <span className="font-medium">Ended</span>
+      </div>
+    );
+  }
+
+  if (!isClient) {
+    return (
+      <div
+        className={cn(
+          "text-xs px-2 py-1 rounded-md bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border border-green-200 dark:border-green-700 flex items-center shadow-sm w-fit",
+          className
+        )}
+      >
+        <span className="text-green-500 dark:text-green-400 font-medium mr-1.5">
+          ⏱
+        </span>
+        <span className="text-green-600 dark:text-green-300 font-medium mr-1.5">
+          Ends:
+        </span>
+        <TimeUnit value={0} unit="h" />
+        <TimeUnit value={0} unit="m" />
+        <TimeUnit value={0} unit="s" isLast={true} />
       </div>
     );
   }

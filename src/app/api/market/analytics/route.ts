@@ -28,47 +28,69 @@ async function getMarketEvents(
   fromBlock?: bigint
 ): Promise<MarketEvent[]> {
   try {
-    // Get logs for SharesPurchased events
-    const shareLogs = await publicClient.getLogs({
-      address: contractAddress,
-      event: {
-        type: "event",
-        name: "SharesPurchased",
-        inputs: [
-          { type: "uint256", name: "marketId", indexed: true },
-          { type: "address", name: "buyer", indexed: true },
-          { type: "bool", name: "isOptionA", indexed: false },
-          { type: "uint256", name: "amount", indexed: false },
-        ],
-      },
-      args: {
-        marketId: BigInt(marketId),
-      },
-      fromBlock: fromBlock || "earliest",
-      toBlock: "latest",
-    });
+    // Get current block number
+    const currentBlock = await publicClient.getBlockNumber();
 
-    // Process logs into events
+    // If no fromBlock specified, start from a reasonable recent block (e.g., 30 days ago)
+    // Base blockchain: ~2 seconds per block, 30 days = ~1,296,000 blocks
+    const startBlock =
+      fromBlock ||
+      (currentBlock - 1296000n > 0n ? currentBlock - 1296000n : 0n);
+
+    // Implement pagination to handle Alchemy's 500 block limit
+    const BLOCK_RANGE = 500n;
     const events: MarketEvent[] = [];
 
-    for (const log of shareLogs) {
-      // Get block timestamp
-      const block = await publicClient.getBlock({
-        blockNumber: log.blockNumber,
+    for (
+      let currentFromBlock = startBlock;
+      currentFromBlock <= currentBlock;
+      currentFromBlock += BLOCK_RANGE
+    ) {
+      const currentToBlock =
+        currentFromBlock + BLOCK_RANGE - 1n > currentBlock
+          ? currentBlock
+          : currentFromBlock + BLOCK_RANGE - 1n;
+
+      // Get logs for SharesPurchased events
+      const shareLogs = await publicClient.getLogs({
+        address: contractAddress,
+        event: {
+          type: "event",
+          name: "SharesPurchased",
+          inputs: [
+            { type: "uint256", name: "marketId", indexed: true },
+            { type: "address", name: "buyer", indexed: true },
+            { type: "bool", name: "isOptionA", indexed: false },
+            { type: "uint256", name: "amount", indexed: false },
+          ],
+        },
+        args: {
+          marketId: BigInt(marketId),
+        },
+        fromBlock: currentFromBlock,
+        toBlock: currentToBlock,
       });
 
-      if (log.args) {
-        const { buyer, isOptionA, amount } = log.args;
-
-        events.push({
+      // Process logs into events
+      for (const log of shareLogs) {
+        // Get block timestamp
+        const block = await publicClient.getBlock({
           blockNumber: log.blockNumber,
-          transactionHash: log.transactionHash,
-          timestamp: Number(block.timestamp) * 1000,
-          eventType: "SharesPurchased",
-          buyer: buyer,
-          isOptionA: isOptionA,
-          amount: Number(amount),
         });
+
+        if (log.args) {
+          const { buyer, isOptionA, amount } = log.args;
+
+          events.push({
+            blockNumber: log.blockNumber,
+            transactionHash: log.transactionHash,
+            timestamp: Number(block.timestamp) * 1000,
+            eventType: "SharesPurchased",
+            buyer: buyer,
+            isOptionA: isOptionA,
+            amount: Number(amount),
+          });
+        }
       }
     }
 

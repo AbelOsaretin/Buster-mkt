@@ -378,8 +378,8 @@ export function MarketBuyInterface({
       }
 
       setError(null);
-    } catch (error) {
-      console.error("Amount validation error:", error);
+    } catch (e) {
+      console.error("Amount validation error:", e);
       toast({
         title: "Error",
         description: "Failed to validate transaction",
@@ -760,7 +760,7 @@ export function MarketBuyInterface({
                   Approve {amount} {tokenSymbol} for this purchase only.
                   {supportsBatching === false && (
                     <span className="block text-xs text-gray-500 mt-1">
-                      Your wallet doesn't support batch transactions.
+                      Your wallet doesn&apos;t support batch transactions.
                     </span>
                   )}
                 </p>

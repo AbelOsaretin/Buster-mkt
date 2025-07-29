@@ -91,9 +91,8 @@ export function MarketBuyInterface({
   const [lastProcessedHash, setLastProcessedHash] = useState<string | null>(
     null
   );
-  const [supportsBatching, setSupportsBatching] = useState<boolean | null>(
-    null
-  );
+  const [batchingFailed, setBatchingFailed] = useState(false);
+
   // Wagmi hooks for reading token data
   const { data: tokenSymbolData, error: tokenSymbolError } = useReadContract({
     address: tokenAddress,
@@ -142,49 +141,6 @@ export function MarketBuyInterface({
     },
   });
   const userAllowance = (allowanceData as bigint | undefined) ?? 0n;
-
-  // Check EIP-5792 wallet capabilities
-  const checkWalletCapabilities = useCallback(async () => {
-    if (!connectorClient) return false;
-
-    try {
-      // Check if wallet supports EIP-5792 batch calls
-      const capabilities = await connectorClient.request({
-        method: "wallet_getCapabilities" as any,
-      });
-
-      console.log("Wallet capabilities:", capabilities);
-
-      // Check if atomic batching is supported
-      // EIP-5792 capabilities are typically returned as an object with chain ID keys
-      const chainId = connectorClient.chain?.id;
-      if (capabilities && typeof capabilities === "object" && chainId) {
-        const chainCapabilities = (capabilities as any)[
-          `0x${chainId.toString(16)}`
-        ];
-        const supportsAtomic =
-          chainCapabilities?.atomicBatch?.supported === true;
-        setSupportsBatching(supportsAtomic);
-        return supportsAtomic;
-      }
-
-      setSupportsBatching(false);
-      return false;
-    } catch (error) {
-      console.log(
-        "EIP-5792 not supported, falling back to sequential transactions"
-      );
-      setSupportsBatching(false);
-      return false;
-    }
-  }, [connectorClient]);
-
-  // Check capabilities when connector changes
-  useEffect(() => {
-    if (connectorClient && supportsBatching === null) {
-      checkWalletCapabilities();
-    }
-  }, [connectorClient, supportsBatching, checkWalletCapabilities]);
 
   // EIP-5792 batch transaction function
   const sendBatchTransaction = async (amountInUnits: bigint) => {
@@ -319,6 +275,7 @@ export function MarketBuyInterface({
       setAmount("");
       setError(null);
       setLastProcessedHash(null);
+      setBatchingFailed(false); // Reset batching state
       setIsVisible(true);
     }, 200);
   }, [
@@ -367,16 +324,8 @@ export function MarketBuyInterface({
         return;
       }
 
-      // Check if we can use batch transactions (EIP-5792)
-      if (supportsBatching === true) {
-        // Skip approval step, go directly to batch execution
-        setBuyingStep("confirm");
-      } else {
-        // Traditional flow: check if approval is needed
-        const needsApproval = amountInUnits > userAllowance;
-        setBuyingStep(needsApproval ? "allowance" : "confirm");
-      }
-
+      // Proceed directly to the confirmation step
+      setBuyingStep("confirm");
       setError(null);
     } catch (e) {
       console.error("Amount validation error:", e);
@@ -464,8 +413,8 @@ export function MarketBuyInterface({
     try {
       const amountInUnits = toUnits(amount, tokenDecimals);
 
-      // Use EIP-5792 batch transaction if supported
-      if (supportsBatching === true) {
+      // Optimistically try batch transaction if it hasn't failed before
+      if (!batchingFailed) {
         try {
           const batchId = await sendBatchTransaction(amountInUnits);
           console.log("Batch transaction submitted:", batchId);
@@ -476,20 +425,39 @@ export function MarketBuyInterface({
             duration: 3000,
           });
 
-          // Note: With EIP-5792, we don't get a standard hash immediately
-          // The wallet handles the batch atomically
+          // With EIP-5792, we don't get a standard hash immediately
+          // The wallet handles the batch atomically. We can refetch and go to success.
+          refetchBalance();
           setBuyingStep("purchaseSuccess");
-        } catch (batchError) {
-          console.error(
-            "Batch transaction failed, falling back to sequential:",
-            batchError
-          );
-          // Fallback to traditional flow
-          setSupportsBatching(false);
-          throw batchError;
+          setIsProcessing(false);
+          return; // Exit after successful batch
+        } catch (batchError: any) {
+          console.error("Batch transaction failed:", batchError);
+          // If user rejected, show toast and stop.
+          if (
+            batchError.message &&
+            batchError.message.includes("user rejected")
+          ) {
+            toast({
+              title: "Transaction Rejected",
+              description: "You rejected the transaction in your wallet.",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
+            return;
+          }
+          // Otherwise, assume batching is not supported and fall back.
+          console.log("Falling back to sequential transactions.");
+          setBatchingFailed(true); // Mark batching as failed to prevent retries
         }
+      }
+
+      // Fallback logic: sequential approval and purchase
+      const needsApproval = amountInUnits > userAllowance;
+      if (needsApproval) {
+        setBuyingStep("allowance");
       } else {
-        // Traditional single transaction (approval already done or not needed)
+        // If no approval is needed, proceed directly to purchase
         await writeContractAsync({
           address: contractAddress,
           abi: contractAbi,
@@ -497,8 +465,6 @@ export function MarketBuyInterface({
           args: [BigInt(marketId), selectedOption === "A", amountInUnits],
         });
       }
-
-      // Don't show toast here for traditional flow - let the useEffect handle it after confirmation
     } catch (error: unknown) {
       console.error("Purchase error:", error);
       let errorMessage = "Failed to process purchase. Check your wallet.";
@@ -672,11 +638,6 @@ export function MarketBuyInterface({
                   {(Number(balance) / Math.pow(10, tokenDecimals)).toFixed(2)}{" "}
                   {tokenSymbol}
                 </p>
-                {supportsBatching === true && (
-                  <p className="text-green-600 font-medium">
-                    ⚡ Batch transactions supported
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -758,11 +719,10 @@ export function MarketBuyInterface({
                 <h3 className="text-lg font-bold mb-2">Approve Tokens</h3>
                 <p className="mb-4 text-sm">
                   Approve {amount} {tokenSymbol} for this purchase only.
-                  {supportsBatching === false && (
-                    <span className="block text-xs text-gray-500 mt-1">
-                      Your wallet doesn&apos;t support batch transactions.
-                    </span>
-                  )}
+                  <span className="block text-xs text-gray-500 mt-1">
+                    Your wallet may not support batch transactions. A separate
+                    approval is needed.
+                  </span>
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button
@@ -792,12 +752,12 @@ export function MarketBuyInterface({
             ) : buyingStep === "confirm" ? (
               <div className="flex flex-col border-2 border-gray-200 rounded-lg p-4">
                 <h3 className="text-lg font-bold mb-2">
-                  {supportsBatching === true
-                    ? "Confirm Batch Purchase"
-                    : "Confirm Purchase"}
+                  {batchingFailed
+                    ? "Confirm Purchase"
+                    : "Confirm Batch Purchase"}
                 </h3>
                 <p className="mb-4 text-sm">
-                  {supportsBatching === true ? (
+                  {!batchingFailed ? (
                     <>
                       <span className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium mb-2">
                         🚀 EIP-5792 Batch Transaction
@@ -834,14 +794,14 @@ export function MarketBuyInterface({
                     {isProcessing || isWritePending || isConfirmingTx ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {supportsBatching === true
-                          ? "Processing Batch..."
-                          : "Confirming..."}
+                        {batchingFailed
+                          ? "Confirming..."
+                          : "Processing Batch..."}
                       </>
-                    ) : supportsBatching === true ? (
-                      "Execute Batch"
-                    ) : (
+                    ) : batchingFailed ? (
                       "Confirm"
+                    ) : (
+                      "Execute Batch"
                     )}
                   </Button>
                   <Button

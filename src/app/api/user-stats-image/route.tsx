@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
       });
     };
 
-    const displayUsername = username || "Anon Trader";
+    const displayUsername = username || "Anonymous Trader";
     const displayAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
 
     const jsx = (

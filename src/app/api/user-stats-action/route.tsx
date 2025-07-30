@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const imageUrl = `${baseUrl}/api/user-stats-image?${imageParams.toString()}&t=${Date.now()}`;
     const postUrl = `${baseUrl}/api/user-stats-action`;
-    const profileUrl = `${baseUrl}/profile/${address}?${imageParams.toString()}`;
+    const checkYoursUrl = `${baseUrl}/?tab=myvotes`;
 
     return NextResponse.json({
       frame: {
@@ -55,8 +55,8 @@ export async function POST(req: NextRequest) {
         image: imageUrl,
         post_url: postUrl,
         buttons: [
-          { label: "View Full Profile", action: "link", target: profileUrl },
-          { label: "Back to Markets", action: "link", target: `${baseUrl}/` },
+          { label: "Check Yours", action: "link", target: checkYoursUrl },
+          { label: "View Markets", action: "link", target: `${baseUrl}/` },
         ],
         state: Buffer.from(JSON.stringify(decodedState)).toString("base64"),
       },

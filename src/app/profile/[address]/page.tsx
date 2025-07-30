@@ -41,20 +41,20 @@ export async function generateMetadata(
     });
 
     const imageUrl = `${baseUrl}/api/user-stats-image?${imageParams.toString()}`;
-    const profileUrl = `${baseUrl}/profile/${address}?${imageParams.toString()}`;
+    // const profileUrl = `${baseUrl}/profile/${address}?${imageParams.toString()}`;
 
     const displayName = username ? `@${username}` : "Anonymous Trader";
     const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-
+    const checkYoursUrl = `${baseUrl}/?tab=myvotes`;
     const miniAppEmbed = {
       version: "next" as const,
       imageUrl: imageUrl,
       button: {
-        title: "View Full Stats",
+        title: "Check Yours",
         action: {
           type: "launch_frame" as const,
-          name: `${displayName}'s Stats`,
-          url: profileUrl,
+          name: "Policast Stats",
+          url: checkYoursUrl,
           iconUrl: pfpUrl || "https://buster-mkt.vercel.app/icon.png",
           splashImageUrl: pfpUrl || "https://buster-mkt.vercel.app/icon.jpg",
           splashBackgroundColor: "#131E2A",
@@ -86,7 +86,7 @@ export async function generateMetadata(
             alt: `${displayName}'s Stats`,
           },
         ],
-        url: profileUrl,
+        url: checkYoursUrl,
         type: "website",
       },
       twitter: {

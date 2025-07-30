@@ -62,7 +62,7 @@ export function MarketBuyInterface({
   market,
 }: MarketBuyInterfaceProps) {
   const { address: accountAddress, isConnected } = useAccount();
-  const { data: connectorClient } = useConnectorClient();
+  // const { data: connectorClient } = useConnectorClient();
   const {
     data: hash,
     writeContractAsync,
@@ -92,7 +92,7 @@ export function MarketBuyInterface({
   const [lastProcessedHash, setLastProcessedHash] = useState<string | null>(
     null
   );
-  const [batchingFailed, setBatchingFailed] = useState(false);
+  // const [batchingFailed, setBatchingFailed] = useState(false);
   const {
     sendCalls,
     isPending: isSendingCalls,

@@ -23,7 +23,7 @@ export function Footer() {
       icon: Trophy,
       label: "Leaderboard",
     },
-    { hrefBase: "/", tabValue: "myvotes", icon: User, label: "My Shares" },
+    { hrefBase: "/", tabValue: "myvotes", icon: User, label: "Profile" },
   ];
 
   // Close info panel when clicking on any navigation item

@@ -7,7 +7,8 @@ import { MarketCard, Market } from "./marketCard";
 import { Footer } from "./footer";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { sdk } from "@farcaster/frame-sdk";
-import { VoteHistory } from "./VoteHistory";
+// import { VoteHistory } from "./VoteHistory";
+import { UserStats } from "./UserStats";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { MarketCardSkeleton } from "./market-card-skeleton";
 import { Navbar } from "./navbar";
@@ -493,7 +494,7 @@ export function EnhancedPredictionMarketDashboard() {
 
               {actualShowVoteHistory && (
                 <TabsContent value="myvotes" className="mt-6">
-                  <VoteHistory />
+                  <UserStats />
                 </TabsContent>
               )}
             </>

@@ -93,7 +93,13 @@ export function UserStats() {
         if (cached) {
           const data = JSON.parse(cached);
           if (Date.now() - data.timestamp < CACHE_TTL_STATS * 1000) {
-            setStats(data.stats);
+            // Convert string values back to BigInt
+            const cachedStats = {
+              ...data.stats,
+              totalInvested: BigInt(data.stats.totalInvested),
+              netWinnings: BigInt(data.stats.netWinnings),
+            };
+            setStats(cachedStats);
             setIsLoading(false);
             return;
           }
@@ -190,9 +196,16 @@ export function UserStats() {
           netWinnings: totalWinnings,
         };
         setStats(newStats);
+
+        // Convert BigInt values to strings for localStorage
+        const statsForCache = {
+          ...newStats,
+          totalInvested: newStats.totalInvested.toString(),
+          netWinnings: newStats.netWinnings.toString(),
+        };
         localStorage.setItem(
           `${CACHE_KEY_STATS}_${address}`,
-          JSON.stringify({ stats: newStats, timestamp: Date.now() })
+          JSON.stringify({ stats: statsForCache, timestamp: Date.now() })
         );
       } catch (error) {
         console.error("Failed to fetch user stats:", error);
@@ -244,54 +257,213 @@ export function UserStats() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Your Performance</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatItem label="Win Rate" value={`${stats.winRate.toFixed(2)}%`} />
-          <StatItem label="Total Wins" value={stats.wins} />
-          <StatItem label="Total Losses" value={stats.losses} />
-          <StatItem
-            label="Total Voted"
-            value={`${formatAmount(stats.totalInvested)} ${tokenSymbol}`}
-          />
-          <StatItem
-            label="Net Winnings"
-            value={`${formatAmount(stats.netWinnings)} ${tokenSymbol}`}
-          />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-white to-gray-50">
+        <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+          <CardTitle className="text-xl font-bold">
+            Performance Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Win Rate Circle */}
+            <div className="flex items-center justify-center">
+              <div className="relative w-32 h-32">
+                <svg
+                  className="w-full h-full transform -rotate-90"
+                  viewBox="0 0 100 100"
+                >
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                    fill="transparent"
+                    className="text-gray-200"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="currentColor"
+                    strokeWidth="8"
+                    fill="transparent"
+                    strokeDasharray={`${2 * Math.PI * 40}`}
+                    strokeDashoffset={`${
+                      2 * Math.PI * 40 * (1 - stats.winRate / 100)
+                    }`}
+                    className="text-green-500 transition-all duration-1000 ease-out"
+                    style={{
+                      strokeLinecap: "round",
+                    }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {stats.winRate.toFixed(1)}%
+                    </div>
+                    <div className="text-xs text-gray-500">Win Rate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard
+                  label="Wins"
+                  value={stats.wins}
+                  icon="🎯"
+                  color="text-green-600"
+                  bgColor="bg-green-50"
+                />
+                <StatCard
+                  label="Losses"
+                  value={stats.losses}
+                  icon="❌"
+                  color="text-red-600"
+                  bgColor="bg-red-50"
+                />
+              </div>
+
+              <StatCard
+                label="Total Invested"
+                value={`${formatAmount(stats.totalInvested)} ${tokenSymbol}`}
+                icon="💰"
+                color="text-blue-600"
+                bgColor="bg-blue-50"
+                fullWidth
+              />
+
+              <StatCard
+                label="Net Winnings"
+                value={`${formatAmount(stats.netWinnings)} ${tokenSymbol}`}
+                icon={Number(stats.netWinnings) >= 0 ? "📈" : "📉"}
+                color={
+                  Number(stats.netWinnings) >= 0
+                    ? "text-green-600"
+                    : "text-red-600"
+                }
+                bgColor={
+                  Number(stats.netWinnings) >= 0 ? "bg-green-50" : "bg-red-50"
+                }
+                fullWidth
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="p-4 text-center border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
+          <div className="text-2xl font-bold text-blue-700">
+            {stats.totalVotes}
+          </div>
+          <div className="text-xs font-medium text-blue-600">Total Votes</div>
+        </Card>
+
+        <Card className="p-4 text-center border-0 shadow-md bg-gradient-to-br from-purple-50 to-purple-100">
+          <div className="text-2xl font-bold text-purple-700">
+            {((stats.wins / Math.max(stats.totalVotes, 1)) * 100).toFixed(0)}%
+          </div>
+          <div className="text-xs font-medium text-purple-600">
+            Success Rate
+          </div>
+        </Card>
+
+        <Card className="p-4 text-center border-0 shadow-md bg-gradient-to-br from-indigo-50 to-indigo-100">
+          <div className="text-2xl font-bold text-indigo-700">
+            {stats.totalVotes > 0
+              ? (
+                  Number(stats.totalInvested) /
+                  stats.totalVotes /
+                  10 ** tokenDecimals
+                ).toFixed(0)
+              : 0}
+          </div>
+          <div className="text-xs font-medium text-indigo-600">Avg Bet</div>
+        </Card>
+      </div>
+    </div>
   );
 }
 
-function StatItem({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+  bgColor,
+  fullWidth = false,
+}: {
+  label: string;
+  value: string | number;
+  icon: string;
+  color: string;
+  bgColor: string;
+  fullWidth?: boolean;
+}) {
   return (
-    <div className="p-4 bg-gray-50 rounded-lg">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="text-2xl font-semibold">{value}</p>
+    <div
+      className={`p-4 rounded-lg border border-gray-100 ${bgColor} ${
+        fullWidth ? "col-span-2" : ""
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">{icon}</span>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-600">{label}</p>
+          <p className={`text-lg font-bold ${color}`}>{value}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function StatsSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <Skeleton className="h-8 w-1/2" />
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="p-4 bg-gray-50 rounded-lg">
-              <Skeleton className="h-5 w-2/3 mb-2" />
-              <Skeleton className="h-8 w-1/2" />
+    <div className="space-y-4">
+      <Card className="overflow-hidden border-0 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-gray-200 to-gray-300">
+          <Skeleton className="h-6 w-1/2 bg-white/20" />
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex items-center justify-center">
+              <Skeleton className="w-32 h-32 rounded-full" />
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="p-4 bg-gray-50 rounded-lg">
+                    <Skeleton className="h-5 w-2/3 mb-2" />
+                    <Skeleton className="h-6 w-1/2" />
+                  </div>
+                ))}
+              </div>
+              {[...Array(2)].map((_, i) => (
+                <div key={i + 2} className="p-4 bg-gray-50 rounded-lg">
+                  <Skeleton className="h-5 w-2/3 mb-2" />
+                  <Skeleton className="h-6 w-1/2" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-3 gap-4">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i} className="p-4 text-center border-0 shadow-md">
+            <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
+            <Skeleton className="h-4 w-2/3 mx-auto" />
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }

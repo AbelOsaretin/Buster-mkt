@@ -395,6 +395,13 @@ export function MarketBuyInterface({
           },
           onError: (err) => {
             console.error("Batch transaction failed, falling back:", err);
+            toast({
+              title: "Batch Transaction Failed",
+              description:
+                "Your wallet doesn't support batch transactions. Falling back to separate approval and purchase steps.",
+              variant: "destructive",
+              duration: 5000,
+            });
             // Fallback to sequential transactions
             const needsApproval = amountInUnits > userAllowance;
             if (needsApproval) {

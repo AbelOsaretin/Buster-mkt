@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     images: ["/icon.jpg"],
   },
   other: {
-    "fc:frame": JSON.stringify({
+    "fc:miniapp": JSON.stringify({
       version: "next",
       imageUrl: "https://buster-mkt.vercel.app/icon.jpg",
       button: {

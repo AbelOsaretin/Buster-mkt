@@ -5,7 +5,7 @@ import { Home, Clock, Trophy, User, Info } from "lucide-react"; // Icons for tab
 import { usePathname, useSearchParams } from "next/navigation"; // Import useSearchParams
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { sdk } from "@farcaster/frame-sdk"; // Add this import
+import { sdk } from "@farcaster/miniapp-sdk"; // Add this import
 
 export function Footer() {
   //eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -18,7 +18,7 @@ import { MarketResolved } from "./market-resolved";
 import { MarketPending } from "./market-pending";
 import { MarketBuyInterface } from "./market-buy-interface";
 import { MarketSharesDisplay } from "./market-shares-display";
-import { sdk } from "@farcaster/frame-sdk";
+import { sdk } from "@farcaster/miniapp-sdk";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faShareFromSquare,

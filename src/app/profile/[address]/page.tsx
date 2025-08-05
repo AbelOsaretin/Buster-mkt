@@ -65,7 +65,7 @@ export async function generateMetadata(
     const resolvedParent = await parent;
     const otherParentData = resolvedParent.other || {};
 
-    const fcFrameKey = "fc:frame" as string;
+    const fcFrameKey = "fc:miniapp" as string;
 
     return {
       title: `${displayName}'s Stats - Policast`,

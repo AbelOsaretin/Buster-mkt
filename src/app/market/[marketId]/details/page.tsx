@@ -94,8 +94,8 @@ export async function generateMetadata(
     const resolvedParent = await parent;
     const otherParentData = resolvedParent.other || {};
 
-    // Ensure fc:frame is explicitly a string key
-    const fcFrameKey = "fc:frame" as string;
+    // Ensure fc:miniapp is explicitly a string key
+    const fcFrameKey = "fc:miniapp" as string;
     return {
       title: market.question,
       description: `View market: ${market.question} - ${market.optionA}: ${yesPercent}%`,

@@ -60,12 +60,12 @@ export async function generateMetadata(
       title: market.question,
       description: `View market: ${market.question} - ${market.optionA}: ${yesPercent}%`,
       other: {
-        "fc:frame": "vNext",
-        "fc:frame:image": imageUrl,
-        "fc:frame:post_url": postUrl,
-        "fc:frame:button:1": "View",
-        "fc:frame:button:1:action": "post",
-        "fc:frame:state": Buffer.from(JSON.stringify({ marketId })).toString(
+        "fc:miniapp": "vNext",
+        "fc:miniapp:image": imageUrl,
+        "fc:miniapp:post_url": postUrl,
+        "fc:miniapp:button:1": "View",
+        "fc:miniapp:button:1:action": "post",
+        "fc:miniapp:state": Buffer.from(JSON.stringify({ marketId })).toString(
           "base64"
         ),
       },

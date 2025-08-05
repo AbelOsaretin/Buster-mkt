@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarketCard, Market } from "./marketCard";
 import { Footer } from "./footer";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { sdk } from "@farcaster/frame-sdk";
+import { sdk } from "@farcaster/miniapp-sdk";
 // import { VoteHistory } from "./VoteHistory";
 import { UserStats } from "./UserStats";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";

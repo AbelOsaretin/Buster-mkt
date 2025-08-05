@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Fragment } from "react";
-import { sdk } from "@farcaster/frame-sdk";
+import { sdk } from "@farcaster/miniapp-sdk";
 import Image from "next/image";
 import { useConnect, useAccount, useDisconnect, Connector } from "wagmi";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -33,7 +33,7 @@ export function Navbar() {
         const inMiniApp = await sdk.isInMiniApp();
         if (inMiniApp && !isAccountConnected) {
           const farcasterConnector = connectors.find(
-            (c) => c.id === "farcasterFrame"
+            (c) => c.id === "farcasterMiniApp"
           );
           if (farcasterConnector) {
             connect({ connector: farcasterConnector });
@@ -75,7 +75,7 @@ export function Navbar() {
     const validConnectors = wagmiConnectors.filter(isValidConnector);
 
     const primaryConnector =
-      validConnectors.find((c) => c.id === "farcasterFrame") ||
+      validConnectors.find((c) => c.id === "farcasterMiniApp") ||
       validConnectors.find((c) => c.id === "metaMask") ||
       (validConnectors.length > 0 ? validConnectors[0] : undefined);
 

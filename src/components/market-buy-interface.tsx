@@ -351,13 +351,91 @@ export function MarketBuyInterface({
           setIsProcessing(false);
         }
       } else if (callsStatusData.status === "failure") {
-        console.error("❌ Batch calls failed");
-        toast({
-          title: "Batch Transaction Failed",
-          description: "Both transactions failed. Please try again.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
+        // Handle failure status - but check if we have partial success
+        const receipts = callsStatusData.receipts;
+
+        console.log(
+          "❌ Batch status is 'failure' but checking receipts for partial success"
+        );
+        console.log("Failure receipts:", receipts);
+
+        if (receipts && receipts.length === 1) {
+          // Farcaster case: batch "fails" but approval succeeds
+          const singleReceipt = receipts[0];
+
+          console.log("=== FAILURE WITH SINGLE RECEIPT ===");
+          console.log("Single receipt (likely approval):", singleReceipt);
+          console.log("Receipt status:", singleReceipt?.status);
+          console.log("Receipt logs:", singleReceipt?.logs);
+
+          if (singleReceipt?.status === "success") {
+            console.warn(
+              "⚠️ Batch failed overall, but approval transaction succeeded."
+            );
+            console.log(
+              "🔍 This is typical Farcaster wallet behavior - non-atomic execution"
+            );
+
+            toast({
+              title: "Partial Success",
+              description:
+                "Token approval successful, but purchase was not executed. Please complete your purchase manually.",
+            });
+            setBuyingStep("batchPartialSuccess");
+            setIsProcessing(false);
+          } else {
+            console.error("❌ Batch failed and single transaction also failed");
+            toast({
+              title: "Transaction Failed",
+              description:
+                "Both approval and purchase failed. Please try again.",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
+          }
+        } else if (receipts && receipts.length === 2) {
+          // Two receipts but overall failure - check individual statuses
+          const approvalReceipt = receipts[0];
+          const purchaseReceipt = receipts[1];
+
+          console.log("=== FAILURE WITH TWO RECEIPTS ===");
+          console.log("Approval receipt:", approvalReceipt);
+          console.log("Purchase receipt:", purchaseReceipt);
+
+          if (
+            approvalReceipt?.status === "success" &&
+            purchaseReceipt?.status !== "success"
+          ) {
+            console.warn("⚠️ Approval succeeded but purchase failed");
+            toast({
+              title: "Purchase Failed",
+              description:
+                "Approval successful, but purchase failed. Please complete your purchase manually.",
+              variant: "destructive",
+            });
+            setBuyingStep("batchPartialSuccess");
+            setIsProcessing(false);
+          } else {
+            console.error("❌ Both transactions failed");
+            toast({
+              title: "Transaction Failed",
+              description:
+                "Both approval and purchase failed. Please try again.",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
+          }
+        } else {
+          console.error(
+            "❌ Batch calls failed with no receipts or unexpected receipt count"
+          );
+          toast({
+            title: "Batch Transaction Failed",
+            description: "Batch transaction failed. Please try again.",
+            variant: "destructive",
+          });
+          setIsProcessing(false);
+        }
       } else if (callsStatusData.status === "pending") {
         console.log("⏳ Batch calls still pending...");
         // Keep waiting, the hook will refetch

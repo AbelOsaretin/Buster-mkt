@@ -9,6 +9,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
   useSendCalls,
+  useWaitForCallsStatus,
   useConnectorClient,
   type BaseError,
 } from "wagmi";
@@ -105,7 +106,14 @@ export function MarketBuyInterface({
     null
   );
   // const [batchingFailed, setBatchingFailed] = useState(false);
-  const { sendCalls, isPending: isSendingCalls } = useSendCalls({
+  const {
+    sendCalls,
+    data: callsData,
+    isSuccess: callsSuccess,
+    isPending: callsPending,
+    isError: callsError,
+    error: callsErrorMsg,
+  } = useSendCalls({
     mutation: {
       onSuccess: (data) => {
         console.log("=== BATCH TRANSACTION CALLBACK ===");
@@ -115,97 +123,41 @@ export function MarketBuyInterface({
         toast({
           title: "Batch Transaction Submitted",
           description:
-            "Processing your Approve + Buy transaction. Verifying completion...",
+            "Processing your Approve + Buy transaction. Waiting for completion...",
         });
-
-        // Verification workaround for Farcaster wallet
-        // The onSuccess fires when the batch is submitted, not necessarily when both calls succeed
-        const balanceBefore = balance;
-        const allowanceBefore = userAllowance;
-
-        console.log("=== PRE-VERIFICATION STATE ===");
-        console.log("Balance before:", balanceBefore.toString());
-        console.log("Allowance before:", allowanceBefore.toString());
-
-        setTimeout(() => {
-          console.log("=== VERIFICATION CHECK STARTING ===");
-
-          Promise.all([refetchBalance(), refetchAllowance()])
-            .then(([newBalanceQuery, newAllowanceQuery]) => {
-              const newBalance =
-                (newBalanceQuery.data as bigint | undefined) ?? balanceBefore;
-              const newAllowance =
-                (newAllowanceQuery.data as bigint | undefined) ??
-                allowanceBefore;
-
-              console.log("=== POST-VERIFICATION STATE ===");
-              console.log("Balance after:", newBalance.toString());
-              console.log("Allowance after:", newAllowance.toString());
-              console.log("Balance changed:", newBalance !== balanceBefore);
-              console.log(
-                "Allowance changed:",
-                newAllowance !== allowanceBefore
-              );
-
-              const balanceDecreased = newBalance < balanceBefore;
-              const allowanceIncreased = newAllowance > allowanceBefore;
-
-              console.log("=== VERIFICATION RESULTS ===");
-              console.log(
-                "Balance decreased (purchase occurred):",
-                balanceDecreased
-              );
-              console.log(
-                "Allowance increased (approval occurred):",
-                allowanceIncreased
-              );
-
-              if (balanceDecreased) {
-                // Success: Balance decreased, purchase went through
-                console.log("✅ Batch transaction fully successful.");
-                toast({
-                  title: "Purchase Successful!",
-                  description: "Your shares have been purchased successfully.",
-                });
-                setBuyingStep("purchaseSuccess");
-              } else if (allowanceIncreased) {
-                // Partial success: Only approval worked
-                console.warn(
-                  "⚠️ Batch transaction partially successful. Approval granted, but purchase failed."
-                );
-                console.log(
-                  "This indicates Farcaster wallet executed calls sequentially, not atomically"
-                );
-                setBuyingStep("batchPartialSuccess");
-              } else {
-                // Neither worked - this shouldn't happen if onSuccess was called
-                console.error(
-                  "❌ Batch transaction reported success but no state changes detected"
-                );
-                toast({
-                  title: "Transaction Status Unclear",
-                  description:
-                    "Please check your balance and try again if needed.",
-                  variant: "destructive",
-                });
-              }
-              setIsProcessing(false);
-            })
-            .catch((error) => {
-              console.error("Error during verification:", error);
-              setIsProcessing(false);
-            });
-        }, 3000); // 3-second delay for block confirmation
       },
       onError: (err) => {
-        console.error("Batch transaction failed, falling back:", err);
-        toast({
-          title: "Batch Transaction Failed",
-          description:
-            "Your wallet may not support batch transactions. Falling back to separate approval and purchase steps.",
-          variant: "destructive",
-          duration: 5000,
-        });
+        console.error("=== BATCH TRANSACTION SUBMISSION FAILED ===");
+        console.error(
+          "This means useSendCalls failed before wallet interaction"
+        );
+        console.error("Error message:", err.message);
+        console.error("Error cause:", err.cause);
+        console.error("Error name:", err.name);
+        console.error("Full error object:", err);
+
+        // Check if it's a wallet capability issue
+        if (
+          err.message?.includes("wallet_sendCalls") ||
+          err.message?.includes("not supported")
+        ) {
+          toast({
+            title: "Batch Transactions Not Supported",
+            description: `Your wallet doesn't support EIP-5792 batch transactions. Using separate approval and purchase steps.`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          toast({
+            title: "Batch Transaction Failed",
+            description: `Failed to submit batch transaction: ${
+              err.message || "Unknown error"
+            }. Using fallback method.`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
+
         // Fallback to sequential transactions
         const amountInUnits = toUnits(amount, tokenDecimals);
         const needsApproval = amountInUnits > userAllowance;
@@ -221,6 +173,21 @@ export function MarketBuyInterface({
         }
         setIsProcessing(false);
       },
+    },
+  });
+
+  // Monitor the status of batch calls
+  const {
+    data: callsStatusData,
+    isLoading: callsStatusLoading,
+    isSuccess: callsStatusSuccess,
+    isError: callsStatusError,
+    error: callsStatusErrorMsg,
+  } = useWaitForCallsStatus({
+    id: callsData?.id as `0x${string}`,
+    query: {
+      enabled: !!callsData?.id,
+      refetchInterval: 1000, // Check every second
     },
   });
 
@@ -313,6 +280,111 @@ export function MarketBuyInterface({
       inputRef.current.focus();
     }
   }, [buyingStep]);
+
+  // Monitor batch calls status
+  useEffect(() => {
+    if (callsStatusSuccess && callsStatusData) {
+      console.log("=== BATCH CALLS STATUS SUCCESS ===");
+      console.log("Calls status data:", callsStatusData);
+      console.log("Status:", callsStatusData.status);
+      console.log("Receipts:", callsStatusData.receipts);
+
+      if (callsStatusData.status === "success") {
+        const receipts = callsStatusData.receipts;
+
+        if (receipts && receipts.length === 2) {
+          // Check both transaction receipts
+          const approvalReceipt = receipts[0];
+          const purchaseReceipt = receipts[1];
+
+          console.log("=== TRANSACTION RECEIPTS ===");
+          console.log("Approval receipt:", approvalReceipt);
+          console.log("Purchase receipt:", purchaseReceipt);
+          console.log("Approval status:", approvalReceipt?.status);
+          console.log("Purchase status:", purchaseReceipt?.status);
+
+          if (
+            approvalReceipt?.status === "success" &&
+            purchaseReceipt?.status === "success"
+          ) {
+            console.log("✅ Both transactions successful!");
+            toast({
+              title: "Purchase Successful!",
+              description: "Your shares have been purchased successfully.",
+            });
+            setBuyingStep("purchaseSuccess");
+            setIsProcessing(false);
+          } else if (
+            approvalReceipt?.status === "success" &&
+            purchaseReceipt?.status !== "success"
+          ) {
+            console.warn("⚠️ Approval successful, but purchase failed");
+            console.log("Purchase failure reason:", purchaseReceipt);
+
+            // Extract error from purchase receipt if available
+            const purchaseError =
+              "Purchase transaction failed for unknown reason";
+            if (purchaseReceipt?.logs) {
+              // Try to decode error from logs or events
+              console.log("Purchase receipt logs:", purchaseReceipt.logs);
+            }
+
+            toast({
+              title: "Purchase Failed",
+              description: `Approval successful, but purchase failed. ${purchaseError}`,
+              variant: "destructive",
+            });
+            setBuyingStep("batchPartialSuccess");
+            setIsProcessing(false);
+          } else {
+            console.error("❌ Approval transaction failed");
+            toast({
+              title: "Transaction Failed",
+              description: "Approval transaction failed. Please try again.",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
+          }
+        } else {
+          console.warn("⚠️ Unexpected number of receipts:", receipts?.length);
+          setBuyingStep("batchPartialSuccess");
+          setIsProcessing(false);
+        }
+      } else if (callsStatusData.status === "failure") {
+        console.error("❌ Batch calls failed");
+        toast({
+          title: "Batch Transaction Failed",
+          description: "Both transactions failed. Please try again.",
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+      } else if (callsStatusData.status === "pending") {
+        console.log("⏳ Batch calls still pending...");
+        // Keep waiting, the hook will refetch
+      }
+    }
+
+    if (callsStatusError && callsStatusErrorMsg) {
+      console.error("=== BATCH CALLS STATUS ERROR ===");
+      console.error("Status error:", callsStatusErrorMsg);
+      console.error("Full error object:", callsStatusError);
+
+      toast({
+        title: "Batch Transaction Failed",
+        description: `Transaction monitoring failed: ${
+          callsStatusErrorMsg.message || "Unknown error"
+        }`,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
+    }
+  }, [
+    callsStatusSuccess,
+    callsStatusError,
+    callsStatusData,
+    callsStatusErrorMsg,
+    toast,
+  ]);
 
   // Calculate implied odds
   // Calculate implied odds
@@ -492,8 +564,7 @@ export function MarketBuyInterface({
       console.log("Current allowance:", userAllowance.toString());
       console.log("Is Farcaster connector:", isFarcasterConnector);
 
-      // For Farcaster, we might need to use a different approach
-      // Let's try without the 'value: 0n' and ensure proper gas estimation
+      // Prepare batch calls without explicit value fields
       const batchCalls = [
         {
           to: tokenAddress,
@@ -502,7 +573,6 @@ export function MarketBuyInterface({
             functionName: "approve",
             args: [contractAddress, amountInUnits],
           }),
-          // Don't include value for ERC20 calls
         },
         {
           to: contractAddress,
@@ -511,7 +581,6 @@ export function MarketBuyInterface({
             functionName: "buyShares",
             args: [BigInt(marketId), selectedOption === "A", amountInUnits],
           }),
-          // Don't include value for contract calls that don't require ETH
         },
       ];
 
@@ -519,7 +588,18 @@ export function MarketBuyInterface({
       console.log("Approve call data:", batchCalls[0].data);
       console.log("BuyShares call data:", batchCalls[1].data);
 
-      // Try the batch transaction according to Farcaster docs
+      // Check if we can use EIP-5792 batch transactions
+      if (isFarcasterConnector) {
+        console.log(
+          "🔗 Using Farcaster wallet with EIP-5792 batch transactions"
+        );
+      } else {
+        console.log(
+          "🔗 Using standard wallet with EIP-5792 batch transactions"
+        );
+      }
+
+      // Try the batch transaction
       sendCalls({
         calls: batchCalls,
       });
@@ -833,13 +913,13 @@ export function MarketBuyInterface({
                       isProcessing ||
                       isWritePending ||
                       isConfirmingTx ||
-                      isSendingCalls
+                      callsPending
                     }
                   >
                     {isProcessing ||
                     isWritePending ||
                     isConfirmingTx ||
-                    isSendingCalls ? (
+                    callsPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         {"Processing Batch..."}
@@ -856,7 +936,7 @@ export function MarketBuyInterface({
                       isProcessing ||
                       isWritePending ||
                       isConfirmingTx ||
-                      isSendingCalls
+                      callsPending
                     }
                   >
                     Cancel

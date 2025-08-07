@@ -247,7 +247,7 @@ export function UserStats() {
 
         // For V2, we can get actual trade history using userTradeHistory mapping
         // Since it's a public mapping, we can access it directly
-        let v2Trades: any[] = [];
+        const v2Trades: any[] = [];
         try {
           // Try to get V2 trade history - we'll start with a reasonable limit
           for (let i = 0; i < 100; i++) {
@@ -349,7 +349,7 @@ export function UserStats() {
         let wins = 0;
         let losses = 0;
         let v1Markets = 0;
-        let v2Markets = v2MarketIds.length;
+        const v2Markets = v2MarketIds.length;
         let v2Wins = 0;
         let v2Losses = 0;
         const totalInvested = allVotes.reduce((acc, v) => acc + v.amount, 0n);

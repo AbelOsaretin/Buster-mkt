@@ -65,7 +65,7 @@ export const config = createConfig({
     metaMask({
       dappMetadata: {
         name: APP_NAME,
-        url: APP_URL,
+        url: window.ethereum,
       },
     }),
   ],

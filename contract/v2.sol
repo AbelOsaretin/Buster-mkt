@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8;
+pragma solidity 0.8.30;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -168,7 +168,7 @@ contract PolicastMarketV2 is Ownable, ReentrancyGuard, AccessControl, Pausable {
     uint256 public freeMarketAllowance = 1000; // Global free shares allowance
 
     // Mappings
-    mapping(uint256 => Market) public markets;
+    mapping(uint256 => Market) internal markets;
     mapping(uint256 => Order) public orders;
     mapping(address => UserPortfolio) public userPortfolios;
     mapping(address => Trade[]) public userTradeHistory;
@@ -311,7 +311,7 @@ contract PolicastMarketV2 is Ownable, ReentrancyGuard, AccessControl, Pausable {
         MarketCategory _category,
         MarketType _marketType,
         uint256 _initialLiquidity
-    ) external whenNotPaused returns (uint256) {
+    ) public whenNotPaused returns (uint256) {
         require(
             msg.sender == owner() || hasRole(QUESTION_CREATOR_ROLE, msg.sender),
             "Not authorized to create markets"
@@ -760,30 +760,6 @@ contract PolicastMarketV2 is Ownable, ReentrancyGuard, AccessControl, Pausable {
         emit LiquidityAdded(_marketId, msg.sender, _amount);
     }
 
-    // Sell shares with AMM pricing
-    function sellShares(uint256 _marketId, uint256 _optionId, uint256 _quantity) external nonReentrant validMarket(_marketId) {
-        require(_quantity > 0, "Quantity must be positive");
-        require(markets[_marketId].userShares[msg.sender][_optionId] >= _quantity, "Insufficient shares");
-        
-        Market storage market = markets[_marketId];
-        require(!market.resolved, "Market already resolved");
-        
-        MarketOption storage option = market.options[_optionId];
-        uint256 sellPrice = calculateSellPrice(_marketId, _optionId, _quantity);
-        
-        // Update AMM reserves
-        option.reserve = option.reserve > _quantity ? option.reserve - _quantity : option.reserve / 2;
-        
-        // Update user shares
-        market.userShares[msg.sender][_optionId] -= _quantity;
-        option.totalShares -= _quantity;
-        
-        // Transfer tokens to user
-        require(bettingToken.transfer(msg.sender, sellPrice), "Transfer failed");
-        
-        emit SharesSold(msg.sender, _marketId, _optionId, _quantity, sellPrice);
-    }
-
     function calculateSellPrice(uint256 _marketId, uint256 _optionId, uint256 _quantity) public view returns (uint256) {
         Market storage market = markets[_marketId];
         MarketOption storage option = market.options[_optionId];
@@ -826,7 +802,7 @@ contract PolicastMarketV2 is Ownable, ReentrancyGuard, AccessControl, Pausable {
         bettingToken = IERC20(_newToken);
         tokenUpdatedAt = block.timestamp;
         
-        emit BettingTokenUpdated(previousBettingToken, _newToken);
+        emit BettingTokenUpdated(previousBettingToken, _newToken, block.timestamp);
     }
 
     // Helper Functions
@@ -977,5 +953,43 @@ contract PolicastMarketV2 is Ownable, ReentrancyGuard, AccessControl, Pausable {
 
     function getBettingToken() external view returns (address) {
         return address(bettingToken);
+    }
+
+    // Getter for markets mapping (since it's internal due to struct complexity)
+    function getMarket(uint256 _marketId) external view validMarket(_marketId) returns (
+        string memory question,
+        string memory description,
+        uint256 endTime,
+        MarketCategory category,
+        MarketType marketType,
+        uint256 winningOptionId,
+        bool resolved,
+        bool disputed,
+        bool validated,
+        address creator,
+        uint256 totalLiquidity,
+        uint256 totalVolume,
+        uint256 createdAt,
+        uint256 optionCount,
+        uint256 ammLiquidityPool
+    ) {
+        Market storage market = markets[_marketId];
+        return (
+            market.question,
+            market.description,
+            market.endTime,
+            market.category,
+            market.marketType,
+            market.winningOptionId,
+            market.resolved,
+            market.disputed,
+            market.validated,
+            market.creator,
+            market.totalLiquidity,
+            market.totalVolume,
+            market.createdAt,
+            market.optionCount,
+            market.ammLiquidityPool
+        );
     }
 }

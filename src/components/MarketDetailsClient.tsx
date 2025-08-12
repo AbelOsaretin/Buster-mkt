@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Clock, Award, Users } from "lucide-react"; //AlertTriangle later for status badge
 import { MarketBuyInterface } from "@/components/market-buy-interface";
 import { MarketV2BuyInterface } from "@/components/market-v2-buy-interface";
+import { MarketV2PositionManager } from "@/components/MarketV2PositionManager";
 import { MarketResolved } from "@/components/market-resolved";
 import { MarketPending } from "@/components/market-pending";
 import MarketTime from "@/components/market-time";
@@ -269,6 +270,39 @@ export function MarketDetailsClient({
               />
             )}
           </div>
+
+          {/* V2 Position Manager - only show for V2 markets */}
+          {market.version === "v2" && (
+            <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
+              <MarketV2PositionManager
+                marketId={Number(marketId)}
+                market={
+                  {
+                    question: market.question,
+                    description: market.question,
+                    endTime: market.endTime,
+                    optionCount: market.options?.length || 2,
+                    disputed: false,
+                    validated: true,
+                    resolved: market.resolved,
+                    category: MarketCategory.OTHER, // Default category
+                    winningOptionId: market.resolved ? market.outcome : 0,
+                    creator: "0x0000000000000000000000000000000000000000", // Unknown creator
+                    totalLiquidity: totalSharesInUnits,
+                    totalVolume: totalSharesInUnits,
+                    options: (market.options || []).map((option, index) => ({
+                      name: option,
+                      description: option,
+                      totalShares: market.optionShares?.[index] || 0n,
+                      totalVolume: 0n,
+                      currentPrice: 0n, // Will be fetched by the component
+                      isActive: !market.resolved,
+                    })) satisfies MarketOption[],
+                  } satisfies MarketV2
+                }
+              />
+            </div>
+          )}
 
           <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
             <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">

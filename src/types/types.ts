@@ -10,6 +10,13 @@ export interface Market {
   resolved: boolean;
 }
 
+// V2 Market Types
+export enum MarketType {
+  PAID = 0,
+  FREE_ENTRY = 1,
+  SPONSORED = 2,
+}
+
 // V2 Market Categories
 export enum MarketCategory {
   POLITICS = 0,
@@ -38,6 +45,7 @@ export interface MarketV2 {
   description: string;
   endTime: bigint;
   category: MarketCategory;
+  marketType?: MarketType;
   optionCount: number;
   options: MarketOption[];
   resolved: boolean;
@@ -48,6 +56,26 @@ export interface MarketV2 {
   totalLiquidity?: bigint;
   totalVolume?: bigint;
   createdAt?: bigint;
+  // Free Entry Configuration
+  freeEntryConfig?: {
+    maxFreeParticipants: bigint;
+    freeSharesPerUser: bigint;
+    currentFreeParticipants: bigint;
+    isActive: boolean;
+  };
+  // Sponsored Market Configuration
+  sponsoredConfig?: {
+    sponsor: string;
+    sponsorPrize: bigint;
+    minimumParticipants: bigint;
+    sponsorMessage: string;
+  };
+  // AMM Configuration
+  ammConfig?: {
+    tokenReserve: bigint;
+    totalLiquidity: bigint;
+    feeRate: bigint;
+  };
 }
 
 // V2 User Portfolio

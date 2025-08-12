@@ -9,7 +9,7 @@ export const publicClient = createPublicClient({
 
 export const contractAddress = "0xd24261cD87Ac11A8961a2d5df7036ad87ca7F02A";
 export const tokenAddress = "0x53Bd7F868764333de01643ca9102ee4297eFA3cb";
-export const V2contractAddress = "0x1Eb51131c5C5C24c98C605A9F76387145bdabd38";
+export const V2contractAddress = "0xF032e7d3E57c833C3b4831361D5B0C53A57b8E7A";
 
 // V2 Contract ABI for multi-option markets
 

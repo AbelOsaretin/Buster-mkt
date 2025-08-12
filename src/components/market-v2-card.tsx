@@ -258,15 +258,24 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
       </CardContent>
 
       <CardFooter className="flex justify-between items-center pt-4">
-        {hasShares ? (
-          <MarketV2SharesDisplay
-            market={market}
-            userShares={userShares || []}
-            options={options}
-          />
-        ) : (
-          <div />
-        )}
+        <div className="flex items-center gap-2">
+          {hasShares ? (
+            <>
+              <MarketV2SharesDisplay
+                market={market}
+                userShares={userShares || []}
+                options={options}
+              />
+              <Link href={`/market/${index}/details`}>
+                <Button variant="outline" size="sm" className="text-xs">
+                  Manage Position
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <div />
+          )}
+        </div>
 
         <div className="flex items-center space-x-2">
           {/* Comment count indicator */}

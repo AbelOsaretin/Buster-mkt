@@ -245,39 +245,40 @@ export function UserStats() {
           );
         }
 
-        // For V2, we can get actual trade history using userTradeHistory mapping
-        // Since it's a public mapping, we can access it directly
+        // Fetch V2 trades using getUserPortfolio to get trade count
         const v2Trades: any[] = [];
         try {
-          // Try to get V2 trade history - we'll start with a reasonable limit
-          for (let i = 0; i < 100; i++) {
-            try {
-              const trade = await publicClient.readContract({
-                address: V2contractAddress,
-                abi: V2contractAbi,
-                functionName: "userTradeHistory",
-                args: [address, BigInt(i)],
-              });
-
-              if (trade && (trade as any).marketId !== undefined) {
-                v2Trades.push({
-                  marketId: Number((trade as any).marketId),
-                  optionId: Number((trade as any).optionId),
-                  buyer: (trade as any).buyer,
-                  seller: (trade as any).seller,
-                  price: BigInt((trade as any).price || 0),
-                  quantity: BigInt((trade as any).quantity || 0),
-                  timestamp: BigInt((trade as any).timestamp || 0),
+          if (v2Portfolio) {
+            const tradeCount = Number((v2Portfolio as any).tradeCount || 0);
+            
+            // Fetch all trades by index
+            for (let i = 0; i < tradeCount; i++) {
+              try {
+                const trade = await publicClient.readContract({
+                  address: V2contractAddress,
+                  abi: V2contractAbi,
+                  functionName: "userTradeHistory",
+                  args: [address, BigInt(i)],
                 });
-              } else {
-                break; // No more trades
+
+                if (trade) {
+                  v2Trades.push({
+                    marketId: Number((trade as any).marketId),
+                    optionId: Number((trade as any).optionId),
+                    buyer: (trade as any).buyer,
+                    seller: (trade as any).seller,
+                    price: BigInt((trade as any).price || 0),
+                    quantity: BigInt((trade as any).quantity || 0),
+                    timestamp: BigInt((trade as any).timestamp || 0),
+                  });
+                }
+              } catch (innerError) {
+                console.error(`Failed to fetch V2 trade ${i}:`, innerError);
               }
-            } catch (innerError) {
-              break; // End of trades or error accessing index
             }
           }
         } catch (error) {
-          console.warn("V2 userTradeHistory not accessible:", error);
+          console.warn("V2 trade history error:", error);
         }
 
         // Get V2 market IDs from trades

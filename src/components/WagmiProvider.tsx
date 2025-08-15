@@ -65,7 +65,7 @@ export const config = createConfig({
     metaMask({
       dappMetadata: {
         name: APP_NAME,
-        url: APP_URL,
+        url: APP_URL, //good to go
       },
     }),
   ],

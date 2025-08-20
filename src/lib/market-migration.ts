@@ -12,36 +12,75 @@ export async function detectMarketVersion(
   marketId: number
 ): Promise<"v1" | "v2"> {
   try {
-    // Try to fetch V1 market info first (V1 markets have lower IDs)
-    const v1MarketInfo = await publicClient.readContract({
-      address: contractAddress,
-      abi: contractAbi,
-      functionName: "getMarketInfo",
-      args: [BigInt(marketId)],
-    });
-
-    // If successful, it's V1
-    return "v1";
-  } catch (error) {
-    // If V1 call fails, try V2
-    try {
-      const v2MarketInfo = await publicClient.readContract({
+    // Try both V1 and V2 in parallel
+    const [v1Result, v2Result] = await Promise.allSettled([
+      publicClient.readContract({
+        address: contractAddress,
+        abi: contractAbi,
+        functionName: "getMarketInfo",
+        args: [BigInt(marketId)],
+      }),
+      publicClient.readContract({
         address: V2contractAddress,
         abi: V2contractAbi,
         functionName: "getMarketInfo",
         args: [BigInt(marketId)],
-      });
+      }),
+    ]);
 
-      // If successful, it's V2
+    const v1Exists = v1Result.status === "fulfilled";
+    const v2Exists = v2Result.status === "fulfilled";
+
+    // If only one version exists, return that one
+    if (v1Exists && !v2Exists) return "v1";
+    if (v2Exists && !v1Exists) return "v2";
+
+    // If both exist, we need to decide which one to prioritize
+    if (v1Exists && v2Exists) {
+      // Check if markets are active/ended to decide priority
+      const v1Data = v1Result.value as unknown as any[];
+      const v2Data = v2Result.value as unknown as any[];
+
+      // V1 market structure: [question, optionA, optionB, endTime, outcome, totalOptionAShares, totalOptionBShares, resolved]
+      const v1EndTime = Number(v1Data[3]);
+      const v1Resolved = v1Data[7] as boolean;
+
+      // V2 market structure: [question, description, endTime, category, optionCount, resolved, disputed, winningOptionId, creator]
+      const v2EndTime = Number(v2Data[2]);
+      const v2Resolved = v2Data[5] as boolean;
+
+      const currentTime = Math.floor(Date.now() / 1000);
+
+      // Priority logic:
+      // 1. If one is active and other is ended/resolved, prefer active
+      // 2. If both are active or both are ended, prefer V2 (newer contract)
+      // 3. If times are very different, prefer the one with later end time
+
+      const v1Active = !v1Resolved && v1EndTime > currentTime;
+      const v2Active = !v2Resolved && v2EndTime > currentTime;
+
+      if (v2Active && !v1Active) {
+        console.log(`Market ${marketId}: V2 active, V1 ended - choosing V2`);
+        return "v2";
+      }
+      if (v1Active && !v2Active) {
+        console.log(`Market ${marketId}: V1 active, V2 ended - choosing V1`);
+        return "v1";
+      }
+
+      // If both have same status, prefer V2 (newer contract)
+      console.log(
+        `Market ${marketId}: Both versions exist with same status - preferring V2`
+      );
       return "v2";
-    } catch (v2Error) {
-      // If both fail, assume V1 (fallback)
-      console.log("Market detection failed for both V1 and V2:", {
-        error,
-        v2Error,
-      });
-      return "v1";
     }
+
+    // If neither exists, fallback to V1
+    console.log(`Market ${marketId}: Neither version found - defaulting to V1`);
+    return "v1";
+  } catch (error) {
+    console.error(`Error detecting market version for ${marketId}:`, error);
+    return "v1";
   }
 }
 
@@ -161,12 +200,37 @@ export async function fetchMarketData(
 ): Promise<{ version: "v1" | "v2"; market: Market | MarketV2 }> {
   const version = await detectMarketVersion(marketId);
 
-  if (version === "v2") {
-    const market = await fetchV2Market(marketId);
-    return { version: "v2", market };
-  } else {
-    const market = await fetchV1Market(marketId);
-    return { version: "v1", market };
+  try {
+    if (version === "v2") {
+      const market = await fetchV2Market(marketId);
+      return { version: "v2", market };
+    } else {
+      const market = await fetchV1Market(marketId);
+      return { version: "v1", market };
+    }
+  } catch (error) {
+    console.error(`Failed to fetch ${version} market ${marketId}:`, error);
+
+    // Fallback: try the other version if the detected one fails
+    try {
+      if (version === "v2") {
+        console.log(`Fallback: trying V1 for market ${marketId}`);
+        const market = await fetchV1Market(marketId);
+        return { version: "v1", market };
+      } else {
+        console.log(`Fallback: trying V2 for market ${marketId}`);
+        const market = await fetchV2Market(marketId);
+        return { version: "v2", market };
+      }
+    } catch (fallbackError) {
+      console.error(
+        `Fallback also failed for market ${marketId}:`,
+        fallbackError
+      );
+      throw new Error(
+        `Market ${marketId} not found in either V1 or V2 contracts`
+      );
+    }
   }
 }
 

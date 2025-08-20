@@ -8,6 +8,7 @@ import {
 import { notFound } from "next/navigation";
 import { Metadata, ResolvingMetadata } from "next";
 import { MarketDetailsClient } from "@/components/MarketDetailsClient";
+import { fetchMarketData as fetchMarketDataFromMigration } from "@/lib/market-migration";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { MarketSharesDisplay } from "@/components/market-shares-display";
@@ -46,47 +47,79 @@ interface Props {
 async function fetchMarketData(marketId: string, publicClient: any) {
   const marketIdBigInt = BigInt(marketId);
 
-  // Try V1 first (V1 markets have lower IDs)
-  try {
-    const v1MarketData = (await publicClient.readContract({
+  // Try both V1 and V2 in parallel to handle overlapping IDs
+  const [v1Result, v2Result] = await Promise.allSettled([
+    publicClient.readContract({
       address: contract.address,
       abi: contractAbi,
       functionName: "getMarketInfo",
       args: [marketIdBigInt],
-    })) as MarketInfoV1ContractReturn;
-
-    // If successful and market exists, return V1 data
-    if (v1MarketData[0]) {
-      // question exists
-      return {
-        version: "v1" as const,
-        data: v1MarketData,
-      };
-    }
-  } catch (error) {
-    // V1 market doesn't exist, try V2
-    console.log(`Market ${marketId} not found in V1, trying V2...`);
-  }
-
-  // Try V2
-  try {
-    const v2MarketData = (await publicClient.readContract({
+    }) as Promise<MarketInfoV1ContractReturn>,
+    publicClient.readContract({
       address: V2contractAddress,
       abi: V2contractAbi,
       functionName: "getMarketInfo",
       args: [marketIdBigInt],
-    })) as MarketInfoV2ContractReturn;
+    }) as Promise<MarketInfoV2ContractReturn>,
+  ]);
 
-    // If successful and market exists, return V2 data
-    if (v2MarketData[0]) {
-      // question exists
+  const v1Exists = v1Result.status === "fulfilled" && v1Result.value[0]; // Check if question exists
+  const v2Exists = v2Result.status === "fulfilled" && v2Result.value[0]; // Check if question exists
+
+  // If only one version exists, return that one
+  if (v1Exists && !v2Exists) {
+    return {
+      version: "v1" as const,
+      data: v1Result.value,
+    };
+  }
+  if (v2Exists && !v1Exists) {
+    return {
+      version: "v2" as const,
+      data: v2Result.value,
+    };
+  }
+
+  // If both exist, decide which one to prioritize
+  if (v1Exists && v2Exists) {
+    const v1Data = v1Result.value;
+    const v2Data = v2Result.value;
+
+    // Check market status to decide priority
+    const v1EndTime = Number(v1Data[3]);
+    const v1Resolved = v1Data[7];
+    const v2EndTime = Number(v2Data[2]);
+    const v2Resolved = v2Data[5];
+
+    const currentTime = Math.floor(Date.now() / 1000);
+
+    const v1Active = !v1Resolved && v1EndTime > currentTime;
+    const v2Active = !v2Resolved && v2EndTime > currentTime;
+
+    // Prefer active market over ended market
+    if (v2Active && !v1Active) {
+      console.log(`Market ${marketId}: V2 active, V1 ended - choosing V2`);
       return {
         version: "v2" as const,
-        data: v2MarketData,
+        data: v2Data,
       };
     }
-  } catch (error) {
-    console.log(`Market ${marketId} not found in V2 either`);
+    if (v1Active && !v2Active) {
+      console.log(`Market ${marketId}: V1 active, V2 ended - choosing V1`);
+      return {
+        version: "v1" as const,
+        data: v1Data,
+      };
+    }
+
+    // If both have same status, prefer V2 (newer contract)
+    console.log(
+      `Market ${marketId}: Both versions exist with same status - preferring V2`
+    );
+    return {
+      version: "v2" as const,
+      data: v2Data,
+    };
   }
 
   throw new Error(`Market ${marketId} not found in either V1 or V2 contracts`);

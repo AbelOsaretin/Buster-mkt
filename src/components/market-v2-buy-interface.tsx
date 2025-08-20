@@ -104,6 +104,28 @@ export function MarketV2BuyInterface({
       onError: (err) => {
         console.error("=== V2 BATCH TRANSACTION SUBMISSION FAILED ===");
         console.error("Error:", err);
+
+        // Check if it's a wallet capability issue
+        if (
+          err.message?.includes("wallet_sendCalls") ||
+          err.message?.includes("not supported") ||
+          err.message?.includes("Method not found")
+        ) {
+          toast({
+            title: "Batch Transactions Not Supported",
+            description: `Your wallet doesn't support EIP-5792 batch transactions. Using separate approval and purchase steps.`,
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          toast({
+            title: "Batch Transaction Failed",
+            description: `Failed to submit batch transaction. Using fallback method.`,
+            variant: "destructive",
+            duration: 3000,
+          });
+        }
+
         // Fallback to sequential transactions
         handleSequentialPurchase();
       },
@@ -120,7 +142,8 @@ export function MarketV2BuyInterface({
     id: callsData?.id,
     query: {
       enabled: !!callsData?.id,
-      refetchInterval: 1000,
+      refetchInterval: 2000, // Check every 2 seconds
+      refetchIntervalInBackground: false,
     },
   });
 

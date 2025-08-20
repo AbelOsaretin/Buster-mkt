@@ -121,18 +121,14 @@ export function MarketBuyInterface({
       },
       onError: (err) => {
         console.error("=== BATCH TRANSACTION SUBMISSION FAILED ===");
-        console.error(
-          "This means useSendCalls failed before wallet interaction"
-        );
         console.error("Error message:", err.message);
-        console.error("Error cause:", err.cause);
-        console.error("Error name:", err.name);
         console.error("Full error object:", err);
 
         // Check if it's a wallet capability issue
         if (
           err.message?.includes("wallet_sendCalls") ||
-          err.message?.includes("not supported")
+          err.message?.includes("not supported") ||
+          err.message?.includes("Method not found")
         ) {
           toast({
             title: "Batch Transactions Not Supported",
@@ -151,19 +147,7 @@ export function MarketBuyInterface({
           });
         }
 
-        // Fallback to sequential transactions
-        const amountInUnits = toUnits(amount, tokenDecimals);
-        const needsApproval = amountInUnits > userAllowance;
-        if (needsApproval) {
-          setBuyingStep("allowance");
-        } else {
-          writeContractAsync({
-            address: contractAddress,
-            abi: contractAbi,
-            functionName: "buyShares",
-            args: [BigInt(marketId), selectedOption === "A", amountInUnits],
-          });
-        }
+        // Fallback to sequential transactions - move this logic to handleConfirm
         setIsProcessing(false);
       },
     },
@@ -181,7 +165,8 @@ export function MarketBuyInterface({
     id: callsData?.id as `0x${string}`,
     query: {
       enabled: !!callsData?.id,
-      refetchInterval: 1000, // Check every second
+      refetchInterval: 2000, // Check every 2 seconds
+      refetchIntervalInBackground: false,
     },
   });
 
@@ -665,35 +650,73 @@ export function MarketBuyInterface({
         console.log(
           "🔗 Using Farcaster wallet with EIP-5792 batch transactions"
         );
+        // Try the batch transaction with Farcaster-specific capabilities
+        sendCalls({
+          calls: batchCalls,
+          capabilities: {
+            atomicity: false, // Farcaster doesn't support atomic transactions
+          },
+        });
       } else {
         console.log(
           "🔗 Using standard wallet with EIP-5792 batch transactions"
         );
+        // Try the batch transaction without capabilities
+        sendCalls({
+          calls: batchCalls,
+        });
       }
-
-      // Try the batch transaction
-      sendCalls({
-        calls: batchCalls,
-      });
     } catch (error: unknown) {
       console.error("Purchase error:", error);
-      let errorMessage = "Failed to process purchase. Check your wallet.";
-      if (error instanceof Error) {
-        errorMessage = (error as BaseError)?.shortMessage || errorMessage;
-        if (error.message.includes("user rejected")) {
-          errorMessage = "Transaction was rejected in your wallet";
-        } else if (error.message.includes("Market trading period has ended")) {
-          errorMessage = "Market trading period has ended";
-        } else if (error.message.includes("insufficient funds")) {
-          errorMessage = "Insufficient funds for gas";
+      console.log(
+        "Batch transaction failed, attempting fallback to sequential transactions"
+      );
+
+      // Fallback to sequential transactions
+      try {
+        const amountInUnits = toUnits(amount, tokenDecimals);
+        const needsApproval = amountInUnits > userAllowance;
+
+        if (needsApproval) {
+          console.log("Starting sequential approval first");
+          setBuyingStep("allowance");
+          await writeContractAsync({
+            address: tokenAddress,
+            abi: tokenAbi,
+            functionName: "approve",
+            args: [contractAddress, amountInUnits],
+          });
+        } else {
+          console.log("Starting direct purchase (already approved)");
+          await writeContractAsync({
+            address: contractAddress,
+            abi: contractAbi,
+            functionName: "buyShares",
+            args: [BigInt(marketId), selectedOption === "A", amountInUnits],
+          });
         }
+      } catch (fallbackError) {
+        console.error("Fallback transaction also failed:", fallbackError);
+        let errorMessage = "Failed to process purchase. Check your wallet.";
+        if (error instanceof Error) {
+          errorMessage = (error as BaseError)?.shortMessage || errorMessage;
+          if (error.message.includes("user rejected")) {
+            errorMessage = "Transaction was rejected in your wallet";
+          } else if (
+            error.message.includes("Market trading period has ended")
+          ) {
+            errorMessage = "Market trading period has ended";
+          } else if (error.message.includes("insufficient funds")) {
+            errorMessage = "Insufficient funds for gas";
+          }
+        }
+        toast({
+          title: "Purchase Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setIsProcessing(false);
       }
-      toast({
-        title: "Purchase Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      setIsProcessing(false);
     }
   };
 

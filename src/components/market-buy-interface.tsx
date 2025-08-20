@@ -105,6 +105,16 @@ export function MarketBuyInterface({
   const [lastProcessedHash, setLastProcessedHash] = useState<string | null>(
     null
   );
+  const [batchTimeout, setBatchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Clear timeout when component unmounts or transaction completes
+  useEffect(() => {
+    return () => {
+      if (batchTimeout) {
+        clearTimeout(batchTimeout);
+      }
+    };
+  }, [batchTimeout]);
   // const [batchingFailed, setBatchingFailed] = useState(false);
   const { sendCalls, data: callsData } = useSendCalls({
     mutation: {
@@ -112,6 +122,12 @@ export function MarketBuyInterface({
         console.log("=== BATCH TRANSACTION CALLBACK ===");
         console.log("Batch transaction submitted with id:", data.id);
         console.log("Batch capabilities:", data.capabilities);
+
+        // Clear timeout since batch transaction was submitted successfully
+        if (batchTimeout) {
+          clearTimeout(batchTimeout);
+          setBatchTimeout(null);
+        }
 
         toast({
           title: "Batch Transaction Submitted",
@@ -123,6 +139,12 @@ export function MarketBuyInterface({
         console.error("=== BATCH TRANSACTION SUBMISSION FAILED ===");
         console.error("Error message:", err.message);
         console.error("Full error object:", err);
+
+        // Clear timeout since we're handling the error
+        if (batchTimeout) {
+          clearTimeout(batchTimeout);
+          setBatchTimeout(null);
+        }
 
         // Check if it's a wallet capability issue
         if (
@@ -147,8 +169,13 @@ export function MarketBuyInterface({
           });
         }
 
-        // Fallback to sequential transactions - move this logic to handleConfirm
-        setIsProcessing(false);
+        // Fallback to sequential transactions using the helper function
+        if (amount && tokenDecimals) {
+          const amountInUnits = toUnits(amount, tokenDecimals);
+          handleFallbackTransaction(amountInUnits);
+        } else {
+          setIsProcessing(false);
+        }
       },
     },
   });
@@ -267,6 +294,12 @@ export function MarketBuyInterface({
       console.log("Calls status data:", callsStatusData);
       console.log("Status:", callsStatusData.status);
       console.log("Receipts:", callsStatusData.receipts);
+
+      // Clear timeout since we have a status update
+      if (batchTimeout) {
+        clearTimeout(batchTimeout);
+        setBatchTimeout(null);
+      }
 
       if (callsStatusData.status === "success") {
         const receipts = callsStatusData.receipts;
@@ -610,113 +643,167 @@ export function MarketBuyInterface({
     }
 
     setIsProcessing(true);
-    try {
-      const amountInUnits = toUnits(amount, tokenDecimals);
 
-      console.log("=== BATCH TRANSACTION DEBUG ===");
-      console.log("Amount in units:", amountInUnits.toString());
-      console.log("Market ID:", marketId);
-      console.log("Selected option A:", selectedOption === "A");
-      console.log("Balance before batch:", balance.toString());
-      console.log("Current allowance:", userAllowance.toString());
-      console.log("Is Farcaster connector:", isFarcasterConnector);
+    const amountInUnits = toUnits(amount, tokenDecimals);
 
-      // Prepare batch calls without explicit value fields
-      const batchCalls = [
-        {
-          to: tokenAddress,
-          data: encodeFunctionData({
-            abi: tokenAbi,
-            functionName: "approve",
-            args: [contractAddress, amountInUnits],
-          }),
-        },
-        {
-          to: contractAddress,
-          data: encodeFunctionData({
-            abi: contractAbi,
-            functionName: "buyShares",
-            args: [BigInt(marketId), selectedOption === "A", amountInUnits],
-          }),
-        },
-      ];
+    console.log("=== BATCH TRANSACTION DEBUG ===");
+    console.log("Amount in units:", amountInUnits.toString());
+    console.log("Market ID:", marketId);
+    console.log("Selected option A:", selectedOption === "A");
+    console.log("Balance before batch:", balance.toString());
+    console.log("Current allowance:", userAllowance.toString());
+    console.log("Is Farcaster connector:", isFarcasterConnector);
+    console.log("Account address:", accountAddress);
+    console.log("Token address:", tokenAddress);
+    console.log("Contract address:", contractAddress);
+    console.log("Connector client:", connectorClient);
+    console.log("sendCalls available:", !!sendCalls);
 
-      console.log("Batch calls prepared:", batchCalls);
-      console.log("Approve call data:", batchCalls[0].data);
-      console.log("BuyShares call data:", batchCalls[1].data);
+    // Check if wallet supports batch transactions
+    if (!sendCalls) {
+      console.warn("sendCalls not available, forcing fallback");
+      handleFallbackTransaction(amountInUnits);
+      return;
+    }
 
-      // Check if we can use EIP-5792 batch transactions
-      if (isFarcasterConnector) {
-        console.log(
-          "🔗 Using Farcaster wallet with EIP-5792 batch transactions"
-        );
-        // Try the batch transaction with Farcaster-specific capabilities
-        sendCalls({
+    // Prepare batch calls without explicit value fields
+    const batchCalls = [
+      {
+        to: tokenAddress,
+        data: encodeFunctionData({
+          abi: tokenAbi,
+          functionName: "approve",
+          args: [contractAddress, amountInUnits],
+        }),
+      },
+      {
+        to: contractAddress,
+        data: encodeFunctionData({
+          abi: contractAbi,
+          functionName: "buyShares",
+          args: [BigInt(marketId), selectedOption === "A", amountInUnits],
+        }),
+      },
+    ];
+
+    console.log("Batch calls prepared:", batchCalls);
+    console.log("Approve call data:", batchCalls[0].data);
+    console.log("BuyShares call data:", batchCalls[1].data);
+    console.log("sendCalls function:", typeof sendCalls);
+
+    // Check if we can use EIP-5792 batch transactions
+    if (isFarcasterConnector) {
+      console.log("🔗 Using Farcaster wallet with EIP-5792 batch transactions");
+      // Try the batch transaction with Farcaster-specific capabilities
+      try {
+        const result = sendCalls({
           calls: batchCalls,
           capabilities: {
             atomicity: false, // Farcaster doesn't support atomic transactions
           },
         });
-      } else {
-        console.log(
-          "🔗 Using standard wallet with EIP-5792 batch transactions"
+        console.log("sendCalls result (Farcaster):", result);
+
+        // Set timeout for batch transaction (10 seconds)
+        const timeoutId = setTimeout(() => {
+          console.warn("Batch transaction timeout - forcing fallback");
+          toast({
+            title: "Transaction Timeout",
+            description:
+              "Batch transaction is taking too long. Switching to individual transactions.",
+            variant: "destructive",
+          });
+          handleFallbackTransaction(amountInUnits);
+        }, 10000);
+        setBatchTimeout(timeoutId);
+      } catch (syncError) {
+        console.error(
+          "Synchronous error calling sendCalls (Farcaster):",
+          syncError
         );
-        // Try the batch transaction without capabilities
-        sendCalls({
+        // Immediate fallback for sync errors
+        handleFallbackTransaction(amountInUnits);
+      }
+    } else {
+      console.log("🔗 Using standard wallet with EIP-5792 batch transactions");
+      // Try the batch transaction without capabilities
+      try {
+        const result = sendCalls({
           calls: batchCalls,
         });
+        console.log("sendCalls result (standard):", result);
+
+        // Set timeout for batch transaction (10 seconds)
+        const timeoutId = setTimeout(() => {
+          console.warn("Batch transaction timeout - forcing fallback");
+          toast({
+            title: "Transaction Timeout",
+            description:
+              "Batch transaction is taking too long. Switching to individual transactions.",
+            variant: "destructive",
+          });
+          handleFallbackTransaction(amountInUnits);
+        }, 10000);
+        setBatchTimeout(timeoutId);
+      } catch (syncError) {
+        console.error(
+          "Synchronous error calling sendCalls (standard):",
+          syncError
+        );
+        // Immediate fallback for sync errors
+        handleFallbackTransaction(amountInUnits);
       }
-    } catch (error: unknown) {
-      console.error("Purchase error:", error);
-      console.log(
-        "Batch transaction failed, attempting fallback to sequential transactions"
-      );
+    }
 
-      // Fallback to sequential transactions
-      try {
-        const amountInUnits = toUnits(amount, tokenDecimals);
-        const needsApproval = amountInUnits > userAllowance;
+    // Note: Async errors will be handled by useSendCalls onError callback
+  };
 
-        if (needsApproval) {
-          console.log("Starting sequential approval first");
-          setBuyingStep("allowance");
-          await writeContractAsync({
-            address: tokenAddress,
-            abi: tokenAbi,
-            functionName: "approve",
-            args: [contractAddress, amountInUnits],
-          });
-        } else {
-          console.log("Starting direct purchase (already approved)");
-          await writeContractAsync({
-            address: contractAddress,
-            abi: contractAbi,
-            functionName: "buyShares",
-            args: [BigInt(marketId), selectedOption === "A", amountInUnits],
-          });
-        }
-      } catch (fallbackError) {
-        console.error("Fallback transaction also failed:", fallbackError);
-        let errorMessage = "Failed to process purchase. Check your wallet.";
-        if (error instanceof Error) {
-          errorMessage = (error as BaseError)?.shortMessage || errorMessage;
-          if (error.message.includes("user rejected")) {
-            errorMessage = "Transaction was rejected in your wallet";
-          } else if (
-            error.message.includes("Market trading period has ended")
-          ) {
-            errorMessage = "Market trading period has ended";
-          } else if (error.message.includes("insufficient funds")) {
-            errorMessage = "Insufficient funds for gas";
-          }
-        }
-        toast({
-          title: "Purchase Failed",
-          description: errorMessage,
-          variant: "destructive",
+  const handleFallbackTransaction = async (amountInUnits: bigint) => {
+    console.log("Starting fallback transaction");
+
+    try {
+      const needsApproval = amountInUnits > userAllowance;
+
+      if (needsApproval) {
+        console.log("Starting sequential approval first");
+        setBuyingStep("allowance");
+        await writeContractAsync({
+          address: tokenAddress,
+          abi: tokenAbi,
+          functionName: "approve",
+          args: [contractAddress, amountInUnits],
         });
-        setIsProcessing(false);
+      } else {
+        console.log("Starting direct purchase (already approved)");
+        await writeContractAsync({
+          address: contractAddress,
+          abi: contractAbi,
+          functionName: "buyShares",
+          args: [BigInt(marketId), selectedOption === "A", amountInUnits],
+        });
       }
+    } catch (fallbackError) {
+      console.error("Fallback transaction also failed:", fallbackError);
+      let errorMessage = "Failed to process purchase. Check your wallet.";
+      if (fallbackError instanceof Error) {
+        errorMessage =
+          (fallbackError as BaseError)?.shortMessage || errorMessage;
+        if (fallbackError.message.includes("user rejected")) {
+          errorMessage = "Transaction was rejected in your wallet";
+        } else if (
+          fallbackError.message.includes("Market trading period has ended")
+        ) {
+          errorMessage = "Market trading period has ended";
+        } else if (fallbackError.message.includes("insufficient funds")) {
+          errorMessage = "Insufficient funds for gas";
+        }
+      }
+      toast({
+        title: "Purchase Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setIsProcessing(false);
     }
   };
 

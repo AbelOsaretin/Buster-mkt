@@ -522,12 +522,19 @@ export function MarketBuyInterface({
   ]);
 
   const checkApproval = async () => {
+    console.log("=== CHECK APPROVAL CALLED ===");
+    console.log("Next button clicked - validating amount");
+
     const numAmount = Number(amount);
+    console.log("Amount to validate:", amount, "parsed as:", numAmount);
+
     if (!amount || numAmount <= 0) {
+      console.log("❌ Amount validation failed - empty or zero");
       setError("Amount must be greater than 0");
       return;
     }
     if (numAmount > MAX_BET) {
+      console.log("❌ Amount exceeds maximum bet:", MAX_BET);
       toast({
         title: "Maximum Bet Exceeded",
         description: `Maximum shares you can buy is ${MAX_BET} ${tokenSymbol}`,
@@ -538,6 +545,7 @@ export function MarketBuyInterface({
 
     try {
       if (!isConnected || !accountAddress) {
+        console.log("❌ Wallet not connected");
         toast({
           title: "Wallet Connection Required",
           description: "Please connect your wallet to continue",
@@ -547,7 +555,11 @@ export function MarketBuyInterface({
       }
 
       const amountInUnits = toUnits(amount, tokenDecimals);
+      console.log("Amount in units:", amountInUnits.toString());
+      console.log("User balance:", balance.toString());
+
       if (amountInUnits > balance) {
+        console.log("❌ Insufficient balance");
         toast({
           title: "Insufficient Balance",
           description: `You have ${(
@@ -557,6 +569,14 @@ export function MarketBuyInterface({
         });
         return;
       }
+
+      console.log("✅ All validations passed - proceeding to confirm step");
+      console.log("Setting buyingStep to 'confirm'");
+      console.log("Current state before setting confirm:");
+      console.log("- isProcessing:", isProcessing);
+      console.log("- isWritePending:", isWritePending);
+      console.log("- isConfirmingTx:", isConfirmingTx);
+      console.log("- callsPending:", callsPending);
 
       // Proceed directly to the confirmation step
       setBuyingStep("confirm");

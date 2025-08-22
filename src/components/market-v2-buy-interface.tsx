@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
+  BaseError,
   useAccount,
   useReadContract,
   useWriteContract,
@@ -11,15 +12,15 @@ import {
   useSendCalls,
   useWaitForCallsStatus,
   useConnectorClient,
-  type BaseError,
 } from "wagmi";
 import {
   V2contractAddress,
   V2contractAbi,
   tokenAddress,
   tokenAbi,
+  publicClient,
 } from "@/constants/contract";
-import { encodeFunctionData } from "viem";
+import { decodeErrorResult, encodeFunctionData } from "viem";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
@@ -214,18 +215,26 @@ export function MarketV2BuyInterface({
       !tokenDecimals
     )
       return;
-
     try {
       const amountInUnits = toUnits(amount, tokenDecimals);
-      const currentPrice = optionData?.[4] || 0n; // currentPrice from getMarketOption
+      if (userBalance === undefined || amountInUnits > userBalance)
+        throw new Error("Insufficient balance");
+      const currentPrice = optionData?.[4] || 0n;
       const maxPricePerShare = calculateMaxPrice(currentPrice);
-
-      console.log("=== V2 DIRECT PURCHASE ===");
-      console.log("Market ID:", marketId);
-      console.log("Option ID:", selectedOptionId);
-      console.log("Amount:", amountInUnits.toString());
-      console.log("Max Price:", maxPricePerShare.toString());
-
+      const gasEstimate = await publicClient.estimateGas({
+        account: accountAddress,
+        to: V2contractAddress,
+        data: encodeFunctionData({
+          abi: V2contractAbi,
+          functionName: "buyShares",
+          args: [
+            BigInt(marketId),
+            BigInt(selectedOptionId),
+            amountInUnits,
+            maxPricePerShare,
+          ],
+        }),
+      });
       await writeContractAsync({
         address: V2contractAddress,
         abi: V2contractAbi,
@@ -236,11 +245,26 @@ export function MarketV2BuyInterface({
           amountInUnits,
           maxPricePerShare,
         ],
-        gas: 300000n,
+        gas: (gasEstimate * 12n) / 10n,
       });
-    } catch (err) {
-      console.error("Direct purchase failed:", err);
-      setError("Direct purchase failed. Please try again.");
+    } catch (err: unknown) {
+      const causeData =
+        err instanceof BaseError ? (err.cause as any)?.data : undefined;
+      const errorMessage =
+        causeData && typeof causeData === "string"
+          ? decodeErrorResult({
+              abi: V2contractAbi,
+              data: causeData as `0x${string}`,
+            }).errorName
+          : (err as BaseError)?.shortMessage ||
+            (err as Error)?.message ||
+            "Transaction failed";
+      toast({
+        title: "Purchase Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setError(errorMessage);
       setBuyingStep("initial");
     }
   }, [
@@ -248,10 +272,12 @@ export function MarketV2BuyInterface({
     selectedOptionId,
     amount,
     tokenDecimals,
+    userBalance,
     optionData,
     calculateMaxPrice,
     marketId,
     writeContractAsync,
+    toast,
   ]);
 
   // Handle sequential purchase (fallback)
@@ -339,24 +365,13 @@ export function MarketV2BuyInterface({
       !tokenDecimals
     )
       return;
-
     try {
       setIsProcessing(true);
       const amountInUnits = toUnits(amount, tokenDecimals);
+      if (userBalance === undefined || amountInUnits > userBalance)
+        throw new Error("Insufficient balance");
       const currentPrice = optionData?.[4] || 0n;
       const maxPricePerShare = calculateMaxPrice(currentPrice);
-
-      console.log("=== V2 BATCH TRANSACTION DEBUG ===");
-      console.log("Amount in units:", amountInUnits.toString());
-      console.log("Market ID:", marketId);
-      console.log("Selected option ID:", selectedOptionId);
-      console.log("Balance before batch:", userBalance?.toString());
-      console.log("Current allowance:", userAllowance?.toString());
-      console.log("Is Farcaster connector:", isFarcasterConnector);
-      console.log("Current price:", currentPrice.toString());
-      console.log("Max price per share:", maxPricePerShare.toString());
-
-      // Prepare batch calls
       const batchCalls = [
         {
           to: tokenAddress,
@@ -380,31 +395,11 @@ export function MarketV2BuyInterface({
           }),
         },
       ];
-
-      // Check wallet capabilities before sending batch
-      let atomicSupported = false;
-      if (window.ethereum && window.ethereum.request) {
-        try {
-          const capabilities = await window.ethereum.request({
-            method: "wallet_getCapabilities",
-            params: [accountAddress, [window.ethereum.chainId]],
-          });
-          atomicSupported =
-            capabilities?.[window.ethereum.chainId]?.atomic === true ||
-            capabilities?.atomic === "supported";
-          console.log("Wallet capabilities:", capabilities);
-        } catch (capErr) {
-          console.warn("Could not fetch wallet capabilities:", capErr);
-        }
-      }
-
-      // Use wagmi's sendCalls. The onError hook will handle fallbacks.
-      sendCalls({
-        calls: batchCalls,
-      });
+      await sendCalls({ calls: batchCalls });
     } catch (err) {
-      console.error("V2 Batch purchase preparation failed:", err);
+      console.error("Batch purchase preparation failed:", err);
       handleSequentialPurchase();
+    } finally {
       setIsProcessing(false);
     }
   }, [
@@ -412,12 +407,10 @@ export function MarketV2BuyInterface({
     selectedOptionId,
     amount,
     tokenDecimals,
+    userBalance,
     optionData,
     calculateMaxPrice,
     marketId,
-    userBalance,
-    userAllowance,
-    isFarcasterConnector,
     sendCalls,
     handleSequentialPurchase,
   ]);

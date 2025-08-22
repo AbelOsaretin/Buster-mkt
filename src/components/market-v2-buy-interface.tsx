@@ -70,7 +70,7 @@ export function MarketV2BuyInterface({
   });
   const { toast } = useToast();
 
-  // Check if we're using Farcaster connector
+  // Check if we're using Farcaster connector {fix this next}
   const isFarcasterConnector =
     connector?.id === "miniAppConnector" ||
     connector?.name?.includes("Farcaster");

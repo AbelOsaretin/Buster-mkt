@@ -397,53 +397,13 @@ export function MarketV2BuyInterface({
         }
       }
 
-      // Try Wagmi first
-      let wagmiFailed = false;
-      try {
-        await sendCalls({
-          calls: batchCalls,
-        });
-      } catch (wagmiErr) {
-        wagmiFailed = true;
-        console.warn("Wagmi batch failed, trying raw provider:", wagmiErr);
-      }
-
-      // If Wagmi fails, try raw provider
-      if (wagmiFailed && window.ethereum && window.ethereum.request) {
-        try {
-          const batchParams = {
-            version: "1.0",
-            chainId: window.ethereum.chainId,
-            from: accountAddress,
-            atomicRequired: true,
-            calls: batchCalls,
-          };
-          const result = await window.ethereum.request({
-            method: "wallet_sendCalls",
-            params: [batchParams],
-          });
-          console.log("Raw wallet_sendCalls result:", result);
-        } catch (rawErr) {
-          const err = rawErr as any;
-          // If error code 4200 or unsupported, fallback
-          if (
-            err?.code === 4200 ||
-            (err?.message && err.message.includes("Unsupported Method"))
-          ) {
-            console.warn(
-              "wallet_sendCalls unsupported, falling back to sequential"
-            );
-            handleSequentialPurchase();
-          } else {
-            console.error("wallet_sendCalls failed:", err);
-            handleSequentialPurchase();
-          }
-        }
-      }
+      // Use wagmi's sendCalls. The onError hook will handle fallbacks.
+      sendCalls({
+        calls: batchCalls,
+      });
     } catch (err) {
       console.error("V2 Batch purchase preparation failed:", err);
       handleSequentialPurchase();
-    } finally {
       setIsProcessing(false);
     }
   }, [

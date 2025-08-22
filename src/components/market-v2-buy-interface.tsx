@@ -478,11 +478,16 @@ export function MarketV2BuyInterface({
       if (callsStatusData.status === "success") {
         const receipts = callsStatusData.receipts;
 
+        console.log("=== V2 BATCH SUCCESS ANALYSIS ===");
+        console.log("Number of receipts:", receipts?.length);
+        console.log("All receipts:", receipts);
+
         if (receipts && receipts.length === 2) {
+          // Standard case: Two receipts (approval + purchase)
           const approvalReceipt = receipts[0];
           const purchaseReceipt = receipts[1];
 
-          console.log("=== V2 TRANSACTION RECEIPTS ===");
+          console.log("=== V2 TRANSACTION RECEIPTS (2) ===");
           console.log("Approval receipt:", approvalReceipt);
           console.log("Purchase receipt:", purchaseReceipt);
 
@@ -504,29 +509,137 @@ export function MarketV2BuyInterface({
 
             // Refetch option data to update UI
             refetchOptionData();
+          } else if (
+            approvalReceipt?.status === "success" &&
+            purchaseReceipt?.status !== "success"
+          ) {
+            console.warn("⚠️ V2 Approval successful, but purchase failed");
+            toast({
+              title: "Purchase Failed",
+              description:
+                "Approval successful, but purchase failed. Please complete your purchase manually.",
+              variant: "destructive",
+            });
+            setBuyingStep("batchPartialSuccess");
           } else {
-            console.error("❌ V2 Transaction failed - checking receipts");
+            console.error("❌ V2 Approval transaction failed");
             toast({
               title: "Transaction Failed",
-              description: "Purchase transaction failed. Please try again.",
+              description: "Approval transaction failed. Please try again.",
               variant: "destructive",
             });
             setBuyingStep("initial");
           }
+        } else if (receipts && receipts.length === 1) {
+          // Some wallets might return only 1 receipt even for successful batch
+          const singleReceipt = receipts[0];
+
+          console.log("=== V2 SINGLE RECEIPT SUCCESS CASE ===");
+          console.log("Single receipt:", singleReceipt);
+          console.log("Receipt status:", singleReceipt?.status);
+
+          if (singleReceipt?.status === "success") {
+            // Since batch status is "success" and we have a successful receipt,
+            // assume the entire batch was successful
+            console.log(
+              "✅ V2 Batch success with single receipt - assuming full success"
+            );
+            setBuyingStep("purchaseSuccess");
+            setAmount("");
+            setSelectedOptionId(null);
+            toast({
+              title: "Purchase Successful!",
+              description: `Successfully bought shares in ${
+                market.options[selectedOptionId || 0]?.name
+              }`,
+            });
+            refetchOptionData();
+          } else {
+            console.warn("⚠️ V2 Single receipt but not successful");
+            setBuyingStep("batchPartialSuccess");
+          }
+        } else if (receipts && receipts.length > 2) {
+          // More than 2 receipts - check if all are successful
+          const allSuccessful = receipts.every(
+            (receipt) => receipt?.status === "success"
+          );
+
+          console.log("=== V2 MULTIPLE RECEIPTS SUCCESS CASE ===");
+          console.log(`Found ${receipts.length} receipts`);
+          console.log("All successful:", allSuccessful);
+
+          if (allSuccessful) {
+            console.log("✅ V2 All receipts successful!");
+            setBuyingStep("purchaseSuccess");
+            setAmount("");
+            setSelectedOptionId(null);
+            toast({
+              title: "Purchase Successful!",
+              description: `Successfully bought shares in ${
+                market.options[selectedOptionId || 0]?.name
+              }`,
+            });
+            refetchOptionData();
+          } else {
+            console.warn("⚠️ V2 Some receipts failed");
+            setBuyingStep("batchPartialSuccess");
+          }
         } else {
-          console.error("❌ V2 Unexpected receipt count:", receipts?.length);
+          // No receipts or empty array - this shouldn't happen for success status
+          console.warn("⚠️ V2 Success status but no receipts");
+          console.log("Assuming success since batch status is 'success'");
+          setBuyingStep("purchaseSuccess");
+          setAmount("");
+          setSelectedOptionId(null);
           toast({
-            title: "Batch Transaction Failed",
-            description: "Batch transaction failed. Please try again.",
-            variant: "destructive",
+            title: "Purchase Successful!",
+            description: `Successfully bought shares in ${
+              market.options[selectedOptionId || 0]?.name
+            }`,
           });
-          setBuyingStep("initial");
+          refetchOptionData();
         }
         setIsProcessing(false);
       } else if (callsStatusData.status === "failure") {
         const receipts = callsStatusData.receipts;
 
-        if (receipts && receipts.length === 2) {
+        console.log(
+          "❌ V2 Batch status is 'failure' but checking receipts for partial success"
+        );
+        console.log("Failure receipts:", receipts);
+
+        if (receipts && receipts.length === 1) {
+          // Farcaster case: batch "fails" but approval succeeds
+          const singleReceipt = receipts[0];
+
+          console.log("=== V2 FAILURE WITH SINGLE RECEIPT ===");
+          console.log("Single receipt (likely approval):", singleReceipt);
+          console.log("Receipt status:", singleReceipt?.status);
+
+          if (singleReceipt?.status === "success") {
+            console.warn(
+              "⚠️ V2 Batch failed overall, but approval transaction succeeded."
+            );
+            toast({
+              title: "Partial Success",
+              description:
+                "Token approval successful, but purchase was not executed. Please complete your purchase manually.",
+            });
+            setBuyingStep("batchPartialSuccess");
+          } else {
+            console.error(
+              "❌ V2 Batch failed and single transaction also failed"
+            );
+            toast({
+              title: "Transaction Failed",
+              description:
+                "Both approval and purchase failed. Please try again.",
+              variant: "destructive",
+            });
+            setBuyingStep("initial");
+          }
+        } else if (receipts && receipts.length === 2) {
+          // Two receipts but overall failure - check individual statuses
           const approvalReceipt = receipts[0];
           const purchaseReceipt = receipts[1];
 
@@ -552,6 +665,33 @@ export function MarketV2BuyInterface({
               title: "Transaction Failed",
               description:
                 "Both approval and purchase failed. Please try again.",
+              variant: "destructive",
+            });
+            setBuyingStep("initial");
+          }
+        } else if (receipts && receipts.length > 2) {
+          // More than 2 receipts - check if any succeeded
+          const anySuccessful = receipts.some(
+            (receipt) => receipt?.status === "success"
+          );
+
+          console.log("=== V2 FAILURE WITH MULTIPLE RECEIPTS ===");
+          console.log(`Found ${receipts.length} receipts`);
+          console.log("Any successful:", anySuccessful);
+
+          if (anySuccessful) {
+            console.warn("⚠️ V2 Partial success in batch failure");
+            toast({
+              title: "Partial Success",
+              description:
+                "Some transactions succeeded, but not all. Please complete your purchase manually.",
+            });
+            setBuyingStep("batchPartialSuccess");
+          } else {
+            console.error("❌ V2 All transactions failed");
+            toast({
+              title: "Transaction Failed",
+              description: "All transactions failed. Please try again.",
               variant: "destructive",
             });
             setBuyingStep("initial");

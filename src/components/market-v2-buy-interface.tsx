@@ -71,10 +71,16 @@ export function MarketV2BuyInterface({
   });
   const { toast } = useToast();
 
-  // Check if we're using Farcaster connector {fix this next}
+  // Check if we're using Farcaster connector
   const isFarcasterConnector =
     connector?.id === "miniAppConnector" ||
     connector?.name?.includes("Farcaster");
+
+  // Check if wallet supports batch transactions (EIP-5792)
+  const supportseBatchTransactions =
+    isFarcasterConnector &&
+    !connector?.name?.includes("MetaMask") &&
+    !connector?.id?.includes("metaMask");
 
   const [isBuying, setIsBuying] = useState(false);
   const [containerHeight, setContainerHeight] = useState("auto");
@@ -581,13 +587,17 @@ export function MarketV2BuyInterface({
     console.log("Amount in units:", amountInUnits.toString());
     console.log("User balance:", userBalance.toString());
     console.log("Sufficient balance:", amountInUnits <= userBalance);
+    console.log("Connector:", connector?.name, connector?.id);
+    console.log("Supports batch transactions:", supportseBatchTransactions);
 
     setBuyingStep("confirm");
 
-    // Try batch transaction first, fallback to sequential
-    if (isFarcasterConnector || connectorClient?.account) {
+    // Only use batch transactions for wallets that support EIP-5792
+    if (supportseBatchTransactions) {
+      console.log("Using batch transaction method");
       handleBatchPurchase();
     } else {
+      console.log("Using sequential transaction method");
       handleSequentialPurchase();
     }
   }, [
@@ -595,8 +605,8 @@ export function MarketV2BuyInterface({
     userBalance,
     tokenDecimals,
     tokenSymbol,
-    isFarcasterConnector,
-    connectorClient,
+    connector,
+    supportseBatchTransactions,
     handleBatchPurchase,
     handleSequentialPurchase,
   ]);

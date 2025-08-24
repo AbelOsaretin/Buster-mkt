@@ -8,13 +8,14 @@ import { Footer } from "./footer";
 import { useEffect, useState, useRef } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { UserStats } from "./UserStats";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Navbar } from "./navbar";
 import { UnifiedMarketList } from "./unified-market-list";
 import { ValidatedMarketList } from "./ValidatedMarketList";
 // import { MarketValidationBanner } from "./ValidationNotice";
 import { BarChart3, TrendingUp, ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
 type LeaderboardEntry = {
   username: string;
@@ -27,7 +28,6 @@ type LeaderboardEntry = {
 
 export function EnhancedPredictionMarketDashboard() {
   const { address } = useAccount();
-  const searchParams = useSearchParams();
   const router = useRouter();
   const currentPathname = usePathname();
 
@@ -41,9 +41,11 @@ export function EnhancedPredictionMarketDashboard() {
   useEffect(() => {
     // This effect runs only on the client, after the initial render
     setIsClient(true);
-    const tabFromUrl = searchParams.get("tab") || "active";
+    // Safely get search params on client side
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabFromUrl = urlParams.get("tab") || "active";
     setActiveTab(tabFromUrl);
-  }, [searchParams]); // Re-run if searchParams change after initial mount
+  }, []); // Only run once on mount
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);

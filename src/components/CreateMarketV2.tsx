@@ -143,6 +143,18 @@ export function CreateMarketV2() {
   });
   const currentAllowance = (allowanceData as bigint | undefined) ?? 0n;
 
+  // Check user token balance
+  const { data: balanceData } = useReadContract({
+    address: tokenAddress,
+    abi: tokenAbi,
+    functionName: "balanceOf",
+    args: [address || "0x0000000000000000000000000000000000000000"],
+    query: {
+      enabled: isConnected && !!address,
+    },
+  });
+  const userBalance = (balanceData as bigint | undefined) ?? 0n;
+
   // Handle batch transaction completion
   useEffect(() => {
     if (callsConfirmed) {
@@ -314,6 +326,19 @@ export function CreateMarketV2() {
         const maxParticipants = BigInt(maxFreeParticipants);
         const totalPrizePool = tokensPerUser * maxParticipants;
         requiredApproval = liquidityWei + totalPrizePool;
+      }
+
+      // Check if user has sufficient balance
+      if (userBalance < requiredApproval) {
+        setIsSubmitting(false);
+        const requiredTokens = Number(requiredApproval) / 1e18;
+        const currentTokens = Number(userBalance) / 1e18;
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${requiredTokens.toLocaleString()} BUSTER tokens but only have ${currentTokens.toLocaleString()}. Please get more tokens to create this market.`,
+          variant: "destructive",
+        });
+        return;
       }
 
       // Add approval if needed
@@ -747,6 +772,47 @@ export function CreateMarketV2() {
                   <span>{initialLiquidity} BUSTER</span>
                 </div>
               )}
+
+              <Separator className="my-2" />
+              <div className="flex justify-between">
+                <span>Your Balance:</span>
+                <span
+                  className={
+                    userBalance <
+                    parseEther(
+                      marketType === MarketType.FREE_ENTRY
+                        ? (
+                            parseFloat(initialLiquidity) +
+                            parseFloat(freeSharesPerUser) *
+                              parseInt(maxFreeParticipants || "0")
+                          ).toString()
+                        : initialLiquidity
+                    )
+                      ? "text-red-500 font-medium"
+                      : "text-green-600 font-medium"
+                  }
+                >
+                  {(Number(userBalance) / 1e18).toLocaleString()} BUSTER
+                </span>
+              </div>
+
+              {userBalance <
+                parseEther(
+                  marketType === MarketType.FREE_ENTRY
+                    ? (
+                        parseFloat(initialLiquidity) +
+                        parseFloat(freeSharesPerUser) *
+                          parseInt(maxFreeParticipants || "0")
+                      ).toString()
+                    : initialLiquidity
+                ) && (
+                <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded mt-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <span className="text-red-700 dark:text-red-300 text-xs">
+                    Insufficient balance to create this market
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -765,7 +831,17 @@ export function CreateMarketV2() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={callsPending || statusLoading || isSubmitting}
+                disabled={
+                  callsPending ||
+                  statusLoading ||
+                  isSubmitting ||
+                  userBalance <
+                    (marketType === MarketType.FREE_ENTRY
+                      ? parseEther(initialLiquidity) +
+                        parseEther(freeSharesPerUser) *
+                          BigInt(maxFreeParticipants)
+                      : parseEther(initialLiquidity))
+                }
                 className="min-w-[120px]"
               >
                 {callsPending || statusLoading || isSubmitting ? (

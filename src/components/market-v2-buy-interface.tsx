@@ -249,9 +249,9 @@ export function MarketV2BuyInterface({
     args: [BigInt(marketId)],
   });
 
-  // Calculate slippage protection (5% slippage tolerance)
+  // Calculate slippage protection (10% slippage tolerance)
   const calculateMaxPrice = useCallback((currentPrice: bigint): bigint => {
-    return (currentPrice * 105n) / 100n; // 5% slippage
+    return (currentPrice * 110n) / 100n; // 10% slippage
   }, []);
 
   // Check if market is validated
@@ -584,7 +584,11 @@ export function MarketV2BuyInterface({
       }
 
       const currentPrice = optionData?.[4] || 0n;
-      const maxPricePerShare = calculateMaxPrice(currentPrice);
+      // Calculate max price per share from estimated cost with slippage tolerance
+      const avgPricePerShare = estimatedCost
+        ? (estimatedCost * BigInt(1e18)) / amountInUnits
+        : currentPrice;
+      const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
 
       console.log("=== V2 BATCH TRANSACTION DEBUG ===");
       console.log("Amount in units:", amountInUnits.toString());
@@ -594,6 +598,8 @@ export function MarketV2BuyInterface({
       console.log("Current allowance:", userAllowance?.toString());
       console.log("Is Farcaster connector:", isFarcasterConnector);
       console.log("Current price:", currentPrice.toString());
+      console.log("Estimated cost:", estimatedCost?.toString());
+      console.log("Avg price per share:", avgPricePerShare.toString());
       console.log("Max price per share:", maxPricePerShare.toString());
 
       const batchCalls = [

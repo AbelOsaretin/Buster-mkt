@@ -79,11 +79,9 @@ export function MarketV2BuyInterface({
     connector?.name?.includes("Farcaster");
 
   // Check if wallet supports batch transactions (EIP-5792)
-  // Enable for all wallets except those known to have issues
+  // MetaMask now supports EIP-5792, only exclude wallets with known issues
   const supportseBatchTransactions =
     !!connector &&
-    !connector?.name?.includes("MetaMask") &&
-    !connector?.id?.includes("metaMask") &&
     !connector?.name?.includes("Ledger") &&
     !connector?.id?.includes("ledger");
 
@@ -295,14 +293,22 @@ export function MarketV2BuyInterface({
     try {
       const amountInUnits = toUnits(amount, tokenDecimals);
 
-      // Check balance
+      // Check balance using estimated cost instead of share amount
       if (!userBalance) {
         throw new Error("Unable to fetch balance. Please try again.");
       }
 
-      if (amountInUnits > userBalance) {
+      // Use estimated cost for balance check, fallback to approximate calculation if not available
+      const requiredBalance =
+        estimatedCost ||
+        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
+
+      if (requiredBalance > userBalance) {
         throw new Error(
-          `Insufficient balance. You have ${formatPrice(
+          `Insufficient balance. Total cost: ${formatPrice(
+            requiredBalance,
+            tokenDecimals
+          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
             userBalance,
             tokenDecimals
           )} ${tokenSymbol || "tokens"}`
@@ -397,6 +403,8 @@ export function MarketV2BuyInterface({
     amount,
     tokenDecimals,
     userBalance,
+    tokenSymbol,
+    estimatedCost,
     optionData,
     calculateMaxPrice,
     marketId,
@@ -418,14 +426,22 @@ export function MarketV2BuyInterface({
       setIsProcessing(true);
       const amountInUnits = toUnits(amount, tokenDecimals);
 
-      // Check balance
+      // Check balance using estimated cost instead of share amount
       if (!userBalance) {
         throw new Error("Unable to fetch balance. Please try again.");
       }
 
-      if (amountInUnits > userBalance) {
+      // Use estimated cost for balance check, fallback to approximate calculation if not available
+      const requiredBalance =
+        estimatedCost ||
+        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
+
+      if (requiredBalance > userBalance) {
         throw new Error(
-          `Insufficient balance. You have ${formatPrice(
+          `Insufficient balance. Total cost: ${formatPrice(
+            requiredBalance,
+            tokenDecimals
+          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
             userBalance,
             tokenDecimals
           )} ${tokenSymbol || "tokens"}`
@@ -521,6 +537,9 @@ export function MarketV2BuyInterface({
     selectedOptionId,
     amount,
     tokenDecimals,
+    userBalance,
+    tokenSymbol,
+    estimatedCost,
     userAllowance,
     optionData,
     calculateMaxPrice,
@@ -542,14 +561,22 @@ export function MarketV2BuyInterface({
       setIsProcessing(true);
       const amountInUnits = toUnits(amount, tokenDecimals);
 
-      // Check balance
+      // Check balance using estimated cost instead of share amount
       if (!userBalance) {
         throw new Error("Unable to fetch balance. Please try again.");
       }
 
-      if (amountInUnits > userBalance) {
+      // Use estimated cost for balance check, fallback to approximate calculation if not available
+      const requiredBalance =
+        estimatedCost ||
+        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
+
+      if (requiredBalance > userBalance) {
         throw new Error(
-          `Insufficient balance. You have ${formatPrice(
+          `Insufficient balance. Total cost: ${formatPrice(
+            requiredBalance,
+            tokenDecimals
+          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
             userBalance,
             tokenDecimals
           )} ${tokenSymbol || "tokens"}`
@@ -620,6 +647,8 @@ export function MarketV2BuyInterface({
     amount,
     tokenDecimals,
     userBalance,
+    tokenSymbol,
+    estimatedCost,
     optionData,
     calculateMaxPrice,
     marketId,
@@ -1158,7 +1187,16 @@ export function MarketV2BuyInterface({
                 return (
                   <button
                     key={index}
-                    onClick={() => setSelectedOptionId(index)}
+                    onClick={() => {
+                      setSelectedOptionId(index);
+                      // Reset buying state when selecting a new option
+                      if (buyingStep !== "initial") {
+                        setBuyingStep("initial");
+                        setIsBuying(false);
+                        setAmount("");
+                        setError(null);
+                      }
+                    }}
                     className={cn(
                       "p-3 rounded-lg border-2 text-left transition-all duration-200",
                       isSelected

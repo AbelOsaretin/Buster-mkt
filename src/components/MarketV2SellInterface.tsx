@@ -286,8 +286,8 @@ export function MarketV2SellInterface({
 
   return (
     <div
-      className="transition-all duration-300 ease-in-out overflow-hidden"
-      style={{ height: containerHeight }}
+      className="transition-all duration-300 ease-in-out"
+      style={{ minHeight: containerHeight }}
     >
       <div ref={contentRef} className="space-y-4">
         {/* Header */}

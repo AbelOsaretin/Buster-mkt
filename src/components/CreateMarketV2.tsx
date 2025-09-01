@@ -143,6 +143,18 @@ export function CreateMarketV2() {
   });
   const currentAllowance = (allowanceData as bigint | undefined) ?? 0n;
 
+  // Check user token balance
+  const { data: balanceData } = useReadContract({
+    address: tokenAddress,
+    abi: tokenAbi,
+    functionName: "balanceOf",
+    args: [address || "0x0000000000000000000000000000000000000000"],
+    query: {
+      enabled: isConnected && !!address,
+    },
+  });
+  const userBalance = (balanceData as bigint | undefined) ?? 0n;
+
   // Handle batch transaction completion
   useEffect(() => {
     if (callsConfirmed) {
@@ -232,6 +244,45 @@ export function CreateMarketV2() {
       });
       return false;
     }
+
+    // Additional validation for free markets
+    if (marketType === MarketType.FREE_ENTRY) {
+      if (
+        parseInt(maxFreeParticipants) < 1 ||
+        parseInt(maxFreeParticipants) > 10000
+      ) {
+        toast({
+          title: "Error",
+          description: "Max free participants must be between 1 and 10,000",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (
+        parseFloat(freeSharesPerUser) < 0.1 ||
+        parseFloat(freeSharesPerUser) > 1000
+      ) {
+        toast({
+          title: "Error",
+          description: "Free tokens per user must be between 0.1 and 1,000",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      // Check if total prize pool is reasonable
+      const totalPrizePool =
+        parseFloat(freeSharesPerUser) * parseInt(maxFreeParticipants);
+      if (totalPrizePool > 1000000) {
+        toast({
+          title: "Error",
+          description: "Total prize pool cannot exceed 1,000,000 tokens",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -241,6 +292,16 @@ export function CreateMarketV2() {
       toast({
         title: "Error",
         description: "You don't have permission to create markets",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prevent multiple submissions
+    if (isSubmitting || callsPending || statusLoading) {
+      toast({
+        title: "Error",
+        description: "Please wait for the current transaction to complete",
         variant: "destructive",
       });
       return;
@@ -256,14 +317,38 @@ export function CreateMarketV2() {
 
       const calls = [];
 
+      // Calculate required approval amount based on market type
+      let requiredApproval = liquidityWei;
+
+      if (marketType === MarketType.FREE_ENTRY) {
+        // For free markets, we need to calculate total cost: liquidity + prize pool
+        const tokensPerUser = parseEther(freeSharesPerUser);
+        const maxParticipants = BigInt(maxFreeParticipants);
+        const totalPrizePool = tokensPerUser * maxParticipants;
+        requiredApproval = liquidityWei + totalPrizePool;
+      }
+
+      // Check if user has sufficient balance
+      if (userBalance < requiredApproval) {
+        setIsSubmitting(false);
+        const requiredTokens = Number(requiredApproval) / 1e18;
+        const currentTokens = Number(userBalance) / 1e18;
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ${requiredTokens.toLocaleString()} BUSTER tokens but only have ${currentTokens.toLocaleString()}. Please get more tokens to create this market.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Add approval if needed
-      if (liquidityWei > currentAllowance) {
+      if (requiredApproval > currentAllowance) {
         calls.push({
           to: tokenAddress,
           data: encodeFunctionData({
             abi: tokenAbi,
             functionName: "approve",
-            args: [V2contractAddress, liquidityWei],
+            args: [V2contractAddress, requiredApproval],
           }),
         });
       }
@@ -273,24 +358,6 @@ export function CreateMarketV2() {
       const value = 0n;
 
       if (marketType === MarketType.FREE_ENTRY) {
-        // For free markets, we need to calculate total cost: liquidity + prize pool
-        const tokensPerUser = parseEther(freeSharesPerUser);
-        const maxParticipants = BigInt(maxFreeParticipants);
-        const totalPrizePool = tokensPerUser * maxParticipants;
-        const totalRequired = liquidityWei + totalPrizePool;
-
-        // Update approval if needed for the total amount
-        if (totalRequired > currentAllowance) {
-          calls[0] = {
-            to: tokenAddress,
-            data: encodeFunctionData({
-              abi: tokenAbi,
-              functionName: "approve",
-              args: [V2contractAddress, totalRequired],
-            }),
-          };
-        }
-
         marketCreationData = encodeFunctionData({
           abi: V2contractAbi,
           functionName: "createFreeMarket",
@@ -301,8 +368,8 @@ export function CreateMarketV2() {
             optionDescriptions,
             BigInt(durationInSeconds),
             category,
-            maxParticipants, // _maxFreeParticipants
-            tokensPerUser, // _tokensPerParticipant
+            BigInt(maxFreeParticipants), // _maxFreeParticipants
+            parseEther(freeSharesPerUser), // _tokensPerParticipant
             liquidityWei, // _initialLiquidity
           ],
         });
@@ -330,6 +397,8 @@ export function CreateMarketV2() {
       });
 
       console.log("Sending batch calls:", calls);
+      console.log("Required approval:", requiredApproval.toString());
+      console.log("Current allowance:", currentAllowance.toString());
 
       await sendCalls({
         calls,
@@ -338,7 +407,7 @@ export function CreateMarketV2() {
       toast({
         title: "Transaction Sent",
         description:
-          liquidityWei > currentAllowance
+          requiredApproval > currentAllowance
             ? "Approving tokens and creating market..."
             : "Creating market...",
       });
@@ -658,6 +727,97 @@ export function CreateMarketV2() {
 
           <Separator />
 
+          {/* Cost Summary */}
+          <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Cost Summary
+            </h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span>Initial Liquidity:</span>
+                <span>{initialLiquidity} BUSTER</span>
+              </div>
+              {marketType === MarketType.FREE_ENTRY && (
+                <>
+                  <div className="flex justify-between">
+                    <span>
+                      Prize Pool ({maxFreeParticipants} × {freeSharesPerUser}):
+                    </span>
+                    <span>
+                      {(
+                        parseFloat(freeSharesPerUser) *
+                        parseInt(maxFreeParticipants || "0")
+                      ).toLocaleString()}{" "}
+                      BUSTER
+                    </span>
+                  </div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between font-medium">
+                    <span>Total Required:</span>
+                    <span>
+                      {(
+                        parseFloat(initialLiquidity) +
+                        parseFloat(freeSharesPerUser) *
+                          parseInt(maxFreeParticipants || "0")
+                      ).toLocaleString()}{" "}
+                      BUSTER
+                    </span>
+                  </div>
+                </>
+              )}
+              {marketType === MarketType.PAID && (
+                <div className="flex justify-between font-medium">
+                  <span>Total Required:</span>
+                  <span>{initialLiquidity} BUSTER</span>
+                </div>
+              )}
+
+              <Separator className="my-2" />
+              <div className="flex justify-between">
+                <span>Your Balance:</span>
+                <span
+                  className={
+                    userBalance <
+                    parseEther(
+                      marketType === MarketType.FREE_ENTRY
+                        ? (
+                            parseFloat(initialLiquidity) +
+                            parseFloat(freeSharesPerUser) *
+                              parseInt(maxFreeParticipants || "0")
+                          ).toString()
+                        : initialLiquidity
+                    )
+                      ? "text-red-500 font-medium"
+                      : "text-green-600 font-medium"
+                  }
+                >
+                  {(Number(userBalance) / 1e18).toLocaleString()} BUSTER
+                </span>
+              </div>
+
+              {userBalance <
+                parseEther(
+                  marketType === MarketType.FREE_ENTRY
+                    ? (
+                        parseFloat(initialLiquidity) +
+                        parseFloat(freeSharesPerUser) *
+                          parseInt(maxFreeParticipants || "0")
+                      ).toString()
+                    : initialLiquidity
+                ) && (
+                <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded mt-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <span className="text-red-700 dark:text-red-300 text-xs">
+                    Insufficient balance to create this market
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
           {/* Submit Button */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -671,7 +831,17 @@ export function CreateMarketV2() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={callsPending || statusLoading || isSubmitting}
+                disabled={
+                  callsPending ||
+                  statusLoading ||
+                  isSubmitting ||
+                  userBalance <
+                    (marketType === MarketType.FREE_ENTRY
+                      ? parseEther(initialLiquidity) +
+                        parseEther(freeSharesPerUser) *
+                          BigInt(maxFreeParticipants)
+                      : parseEther(initialLiquidity))
+                }
                 className="min-w-[120px]"
               >
                 {callsPending || statusLoading || isSubmitting ? (
@@ -686,9 +856,17 @@ export function CreateMarketV2() {
                 ) : (
                   <>
                     <Plus className="h-4 w-4 mr-2" />
-                    {parseEther(initialLiquidity) > currentAllowance
-                      ? "Approve & Create Market"
-                      : "Create Market"}
+                    {(() => {
+                      const requiredApproval =
+                        marketType === MarketType.FREE_ENTRY
+                          ? parseEther(initialLiquidity) +
+                            parseEther(freeSharesPerUser) *
+                              BigInt(maxFreeParticipants)
+                          : parseEther(initialLiquidity);
+                      return requiredApproval > currentAllowance
+                        ? "Approve & Create Market"
+                        : "Create Market";
+                    })()}
                   </>
                 )}
               </Button>

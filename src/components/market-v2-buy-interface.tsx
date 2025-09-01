@@ -209,6 +209,26 @@ export function MarketV2BuyInterface({
     query: { enabled: selectedOptionId !== null },
   });
 
+  // Fetch real-time AMM cost estimation for purchase amount
+  const { data: estimatedCost, refetch: refetchEstimatedCost } =
+    useReadContract({
+      address: V2contractAddress,
+      abi: V2contractAbi,
+      functionName: "calculateAMMBuyCost",
+      args: [
+        BigInt(marketId),
+        BigInt(selectedOptionId || 0),
+        toUnits(amount || "0", tokenDecimals || 18),
+      ],
+      query: {
+        enabled:
+          selectedOptionId !== null &&
+          amount !== "" &&
+          amount !== null &&
+          parseFloat(amount || "0") > 0,
+      },
+    });
+
   // Fetch market info for validation
   const { data: marketInfo } = useReadContract({
     address: V2contractAddress,
@@ -275,19 +295,17 @@ export function MarketV2BuyInterface({
         );
       }
 
-      const currentPrice = optionData?.[4] || 0n;
-      const maxPricePerShare = calculateMaxPrice(currentPrice);
+      // Calculate max price per share from estimated cost with slippage tolerance
+      const avgPricePerShare = estimatedCost
+        ? (estimatedCost * BigInt(1e18)) / amountInUnits
+        : optionData?.[4] || 0n;
+      const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
 
-      console.log("=== V2 DIRECT PURCHASE ===");
-      console.log("Market ID:", marketId);
-      console.log("Option ID:", selectedOptionId);
-      console.log("Amount:", amountInUnits.toString());
-      console.log("Max Price:", maxPricePerShare.toString());
-      console.log("Option Data:", optionData);
-      console.log("Current Price from option data:", currentPrice.toString());
-      console.log("Market object:", market);
-      console.log("V2 Contract Address:", V2contractAddress);
-      console.log("Account Address:", accountAddress);
+      console.log("=== V2 BATCH PURCHASE ===");
+      console.log("Amount in units:", amountInUnits.toString());
+      console.log("Estimated cost:", estimatedCost?.toString());
+      console.log("Avg price per share:", avgPricePerShare.toString());
+      console.log("Max price per share:", maxPricePerShare.toString());
 
       await writeContractAsync({
         address: V2contractAddress,
@@ -419,12 +437,15 @@ export function MarketV2BuyInterface({
         });
       } else {
         setBuyingStep("confirm");
-        // Direct purchase
-        const currentPrice = optionData?.[4] || 0n; // currentPrice from getMarketOption
-        const maxPricePerShare = calculateMaxPrice(currentPrice);
+        // Direct purchase using estimated cost
+        const avgPricePerShare = estimatedCost
+          ? (estimatedCost * BigInt(1e18)) / amountInUnits
+          : optionData?.[4] || 0n;
+        const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
 
         console.log("Making direct purchase...");
-        console.log("Current price:", currentPrice.toString());
+        console.log("Estimated cost:", estimatedCost?.toString());
+        console.log("Avg price per share:", avgPricePerShare.toString());
         console.log("Max price per share:", maxPricePerShare.toString());
 
         await writeContractAsync({
@@ -658,10 +679,16 @@ export function MarketV2BuyInterface({
       return;
     }
 
+    // Convert amount to token units
     const amountInUnits = toUnits(amount, tokenDecimals);
-    if (amountInUnits > userBalance) {
+
+    // Use estimated cost instead of flat amount for balance check
+    if (estimatedCost && estimatedCost > userBalance) {
       setError(
-        `Insufficient balance. You have ${formatPrice(
+        `Insufficient balance. Total cost: ${formatPrice(
+          estimatedCost,
+          tokenDecimals
+        )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
           userBalance,
           tokenDecimals
         )} ${tokenSymbol || "tokens"}`
@@ -706,6 +733,9 @@ export function MarketV2BuyInterface({
     userBalance,
     tokenDecimals,
     tokenSymbol,
+    estimatedCost,
+    optionData,
+    marketInfo,
     connector,
     supportseBatchTransactions,
     handleBatchPurchase,
@@ -992,9 +1022,11 @@ export function MarketV2BuyInterface({
       if (buyingStep === "allowance") {
         // Approval confirmed, now purchase
         setBuyingStep("confirm");
-        const currentPrice = optionData?.[4] || 0n;
-        const maxPricePerShare = calculateMaxPrice(currentPrice);
         const amountInUnits = toUnits(amount, tokenDecimals || 18);
+        const avgPricePerShare = estimatedCost
+          ? (estimatedCost * BigInt(1e18)) / amountInUnits
+          : optionData?.[4] || 0n;
+        const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
 
         writeContractAsync({
           address: V2contractAddress,
@@ -1020,6 +1052,7 @@ export function MarketV2BuyInterface({
         setSelectedOptionId(null);
         setIsBuying(false);
         refetchOptionData();
+        refetchEstimatedCost();
       }
     }
   }, [
@@ -1028,6 +1061,7 @@ export function MarketV2BuyInterface({
     lastProcessedHash,
     buyingStep,
     optionData,
+    estimatedCost,
     calculateMaxPrice,
     amount,
     tokenDecimals,
@@ -1037,6 +1071,7 @@ export function MarketV2BuyInterface({
     market.options,
     toast,
     refetchOptionData,
+    refetchEstimatedCost,
   ]);
 
   // Update container height
@@ -1085,8 +1120,8 @@ export function MarketV2BuyInterface({
 
   return (
     <div
-      className="w-full transition-all duration-300 ease-in-out overflow-hidden"
-      style={{ height: containerHeight }}
+      className="w-full transition-all duration-300 ease-in-out overflow-visible"
+      style={{ minHeight: containerHeight }}
     >
       <div ref={contentRef} className="space-y-4">
         {!isBuying ? (
@@ -1124,7 +1159,7 @@ export function MarketV2BuyInterface({
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-gray-900">
-                          ${currentPrice}
+                          {currentPrice} {tokenSymbol}
                         </p>
                         <p className="text-xs text-gray-500">
                           {formatPrice(option.totalShares)} shares
@@ -1146,7 +1181,14 @@ export function MarketV2BuyInterface({
           </div>
         ) : (
           // Buying flow
-          <div className="space-y-4">
+          <div
+            className="space-y-4"
+            style={{
+              maxHeight: "70vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             {buyingStep === "amount" && (
               <>
                 <div className="text-center">
@@ -1154,17 +1196,18 @@ export function MarketV2BuyInterface({
                     Buying: {market.options[selectedOptionId!]?.name}
                   </h4>
                   <p className="text-xs text-gray-500">
-                    Current price: $
+                    Current price:{" "}
                     {formatPrice(
                       market.options[selectedOptionId!]?.currentPrice
-                    )}
+                    )}{" "}
+                    {tokenSymbol}
                   </p>
                 </div>
-                <div>
+                <div className="overflow-y-auto flex-grow">
                   <Input
                     ref={inputRef}
                     type="number"
-                    placeholder={`Amount in ${tokenSymbol || "tokens"}`}
+                    placeholder={`Amount of shares to buy`}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="w-full"
@@ -1175,9 +1218,37 @@ export function MarketV2BuyInterface({
                       {tokenSymbol}
                     </p>
                   )}
+                  {estimatedCost && amount && parseFloat(amount) > 0 && (
+                    <div className="text-sm text-gray-600 mt-2 p-2 bg-gray-50 rounded">
+                      <div className="flex justify-between">
+                        <span>Shares:</span>
+                        <span>{amount}</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span>Total Cost:</span>
+                        <span>
+                          {formatPrice(estimatedCost)} {tokenSymbol}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Avg Price/Share:</span>
+                        <span>
+                          {formatPrice(
+                            estimatedCost /
+                              BigInt(
+                                Math.floor(
+                                  parseFloat(amount) * Math.pow(10, 18)
+                                )
+                              )
+                          )}{" "}
+                          {tokenSymbol}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {error && <p className="text-sm text-red-600">{error}</p>}
-                <div className="flex space-x-2">
+                <div className="flex space-x-2 sticky bottom-0 bg-white pt-2 mt-2">
                   <Button
                     onClick={() => {
                       setIsBuying(false);

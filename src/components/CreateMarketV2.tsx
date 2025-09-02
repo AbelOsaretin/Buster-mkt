@@ -465,28 +465,14 @@ export function CreateMarketV2() {
           const totalPrizePool = tokensPerUser * maxParticipants;
           console.log("Total prize pool (wei):", totalPrizePool.toString());
 
-          // NOTE: Contract has a bug where createFreeMarket transfers tokens twice:
-          // 1. totalRequired (liquidity + prize pool)
-          // 2. _initialLiquidity again in createMarket
-          // So we need to approve: liquidity + prize pool + liquidity = 2*liquidity + prize pool
-          requiredApproval = liquidityWei + totalPrizePool + liquidityWei;
+          requiredApproval = liquidityWei + totalPrizePool;
           console.log(
-            "💰 Required approval (accounting for contract):",
+            "💰 Updated required approval (liquidity + prize pool):",
             requiredApproval.toString()
-          );
-          console.log(
-            "⚠️ Contract transfers liquidity twice, so approving extra:",
-            liquidityWei.toString(),
-            "tokens"
           );
           console.log(
             "💎 Prize pool amount:",
             totalPrizePool.toString(),
-            "BUSTER"
-          );
-          console.log(
-            "🔄 Total required (due to contract bug):",
-            (Number(requiredApproval) / 1e18).toLocaleString(),
             "BUSTER"
           );
         } catch (error) {
@@ -523,7 +509,7 @@ export function CreateMarketV2() {
         const currentTokens = Number(userBalance) / 1e18;
         const isFreeMarket = marketType === MarketType.FREE_ENTRY;
         const extraMessage = isFreeMarket
-          ? " Note: Free markets require extra tokens due to a contract implementation that transfers liquidity twice."
+          ? " Note: Free markets require tokens for both initial liquidity and the prize pool."
           : "";
         toast({
           title: "Insufficient Balance",

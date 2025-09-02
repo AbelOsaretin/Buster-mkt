@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { useUserRoles } from "@/hooks/useUserRoles";
 import Link from "next/link";
+import { formatPrice } from "@/lib/utils";
 
 interface MarketInfo {
   marketId: number;
@@ -425,7 +426,7 @@ export function MarketResolver() {
                         </span>
                         <p className="font-medium">
                           {market.totalShares.reduce(
-                            (sum, shares) => sum + Number(shares),
+                            (sum, shares) => sum + Number(formatPrice(shares)),
                             0
                           )}
                         </p>
@@ -443,10 +444,7 @@ export function MarketResolver() {
                           >
                             <span className="text-sm">{option}</span>
                             <div className="text-xs text-gray-500">
-                              {Number(
-                                market.totalShares[index]
-                              ).toLocaleString()}{" "}
-                              shares
+                              {formatPrice(market.totalShares[index])} shares
                               {market.resolved &&
                                 Number(market.winningOptionId) === index && (
                                   <CheckCircle className="inline h-3 w-3 ml-1 text-green-500" />
@@ -528,9 +526,7 @@ export function MarketResolver() {
                       {selectedMarket.options.map((option, index) => (
                         <SelectItem key={index} value={index.toString()}>
                           {option} (
-                          {Number(
-                            selectedMarket.totalShares[index]
-                          ).toLocaleString()}{" "}
+                          {formatPrice(selectedMarket.totalShares[index])}{" "}
                           shares)
                         </SelectItem>
                       ))}

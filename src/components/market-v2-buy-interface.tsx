@@ -1217,9 +1217,9 @@ export function MarketV2BuyInterface({
   // Show loading state while checking validation
   if (isValidated === null) {
     return (
-      <div className="w-full p-6 text-center bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
-        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-blue-500" />
-        <p className="text-sm text-gray-600 dark:text-gray-300">
+      <div className="w-full p-3 text-center bg-gray-50 dark:bg-gray-800/50 rounded-md border border-gray-200 dark:border-gray-700">
+        <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1 text-blue-500" />
+        <p className="text-xs text-gray-600 dark:text-gray-300">
           Checking market status...
         </p>
       </div>
@@ -1238,10 +1238,10 @@ export function MarketV2BuyInterface({
       className="w-full transition-all duration-300 ease-in-out overflow-visible"
       style={{ minHeight: containerHeight }}
     >
-      <div ref={contentRef} className="space-y-4 p-1">
+      <div ref={contentRef} className="space-y-1">
         {/* Free Token Claim Section - Show for free markets */}
         {isFreeMarket && (
-          <div className="mb-4">
+          <div className="mb-1">
             <FreeTokenClaimButton
               marketId={marketId}
               onClaimComplete={() => {
@@ -1254,14 +1254,14 @@ export function MarketV2BuyInterface({
 
         {!isBuying ? (
           // Initial state - option selection
-          <div className="space-y-4">
+          <div className="space-y-1">
             <div className="px-1">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+              <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">
                 Select an option:
               </h4>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-1">
               {market.options.map((option, index) => {
                 const currentPrice = formatPrice(option.currentPrice);
                 const isSelected = selectedOptionId === index;
@@ -1279,31 +1279,22 @@ export function MarketV2BuyInterface({
                       }
                     }}
                     className={cn(
-                      "w-full p-4 rounded-xl border-2 text-left transition-all duration-200 shadow-sm",
-                      "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-                      "dark:focus:ring-offset-gray-800",
+                      "w-full p-1.5 rounded-md border text-left transition-all duration-200",
+                      "focus:outline-none focus:ring-1 focus:ring-blue-500",
                       isSelected
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400 shadow-md"
-                        : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400"
+                        : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"
                     )}
                   >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm sm:text-base truncate">
+                    <div className="flex justify-between items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 text-xs truncate">
                           {option.name}
                         </p>
-                        {option.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 sm:truncate">
-                            {option.description}
-                          </p>
-                        )}
                       </div>
-                      <div className="text-left sm:text-right flex-shrink-0">
-                        <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
                           {currentPrice} {tokenSymbol}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {formatPrice(option.totalShares)} shares
                         </p>
                       </div>
                     </div>
@@ -1312,12 +1303,12 @@ export function MarketV2BuyInterface({
               })}
             </div>
 
-            <div className="pt-2">
+            <div className="pt-1">
               <Button
                 onClick={handlePurchase}
                 disabled={selectedOptionId === null || !isConnected}
-                className="w-full h-12 text-base font-semibold"
-                size="lg"
+                className="w-full h-8 text-xs font-medium"
+                size="sm"
               >
                 {!isConnected ? "Connect Wallet" : "Buy Shares"}
               </Button>
@@ -1325,14 +1316,14 @@ export function MarketV2BuyInterface({
           </div>
         ) : (
           // Buying flow
-          <div className="space-y-4 max-h-[70vh] flex flex-col">
+          <div className="space-y-2 max-h-[70vh] flex flex-col">
             {buyingStep === "amount" && (
               <>
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 text-center border border-gray-200 dark:border-gray-700">
-                  <h4 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-md p-1.5 text-center border border-gray-200 dark:border-gray-700">
+                  <h4 className="text-xs font-medium text-gray-800 dark:text-gray-200">
                     Buying: {market.options[selectedOptionId!]?.name}
                   </h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
                     Current price:{" "}
                     <span className="font-medium">
                       {formatPrice(
@@ -1343,9 +1334,9 @@ export function MarketV2BuyInterface({
                   </p>
                 </div>
 
-                <div className="flex-grow overflow-y-auto space-y-4">
+                <div className="flex-grow overflow-y-auto space-y-1.5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">
                       Number of shares
                     </label>
                     <Input
@@ -1395,13 +1386,13 @@ export function MarketV2BuyInterface({
                         setAmount(value);
                       }}
                       max={MAX_SHARES}
-                      className="w-full h-12 text-base bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                      className="w-full h-8 text-xs bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
                     />
                   </div>
 
                   {userBalance && tokenDecimals && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 space-y-2 border border-blue-200 dark:border-blue-800">
-                      <div className="text-xs space-y-1">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-md p-1.5 space-y-0.5 border border-blue-200 dark:border-blue-800">
+                      <div className="text-xs space-y-0.5">
                         <div className="flex justify-between">
                           <span className="text-gray-600 dark:text-gray-400">
                             Your balance:
@@ -1437,12 +1428,12 @@ export function MarketV2BuyInterface({
                   )}
 
                   {estimatedCost && amount && parseFloat(amount) > 0 && (
-                    <div className="bg-gray-50 dark:bg-gray-800/80 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                      <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                    <div className="bg-gray-50 dark:bg-gray-800/80 rounded-md p-1.5 border border-gray-200 dark:border-gray-700">
+                      <h5 className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-0.5">
                         Purchase Summary
                       </h5>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
+                      <div className="space-y-0.5">
+                        <div className="flex justify-between text-xs">
                           <span className="text-gray-600 dark:text-gray-400">
                             Shares:
                           </span>
@@ -1450,7 +1441,7 @@ export function MarketV2BuyInterface({
                             {amount}
                           </span>
                         </div>
-                        <div className="flex justify-between text-sm font-semibold border-t border-gray-200 dark:border-gray-600 pt-2">
+                        <div className="flex justify-between text-xs font-semibold border-t border-gray-200 dark:border-gray-600 pt-0.5">
                           <span className="text-gray-800 dark:text-gray-200">
                             Total Cost:
                           </span>
@@ -1480,14 +1471,14 @@ export function MarketV2BuyInterface({
                 </div>
 
                 {error && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <p className="text-sm text-red-700 dark:text-red-400">
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-1.5">
+                    <p className="text-xs text-red-700 dark:text-red-400">
                       {error}
                     </p>
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-2 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 sticky bottom-0">
+                <div className="flex gap-2 pt-1 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 sticky bottom-0">
                   <Button
                     onClick={() => {
                       setIsBuying(false);
@@ -1495,7 +1486,7 @@ export function MarketV2BuyInterface({
                       setError(null);
                     }}
                     variant="outline"
-                    className="flex-1 h-12 text-base border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    className="flex-1 h-8 text-xs border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                   >
                     Cancel
                   </Button>
@@ -1507,24 +1498,24 @@ export function MarketV2BuyInterface({
                       parseFloat(amount) > MAX_SHARES ||
                       !!error
                     }
-                    className="flex-1 h-12 text-base font-semibold"
+                    className="flex-1 h-8 text-xs font-medium"
                   >
-                    Confirm Purchase
+                    Confirm
                   </Button>
                 </div>
               </>
             )}
 
             {(buyingStep === "allowance" || buyingStep === "confirm") && (
-              <div className="text-center py-8 space-y-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-500" />
+              <div className="text-center py-4 space-y-2 bg-gray-50 dark:bg-gray-800/50 rounded-md border border-gray-200 dark:border-gray-700">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-blue-500" />
                 <div>
-                  <p className="text-base font-medium text-gray-800 dark:text-gray-200">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
                     {buyingStep === "allowance"
                       ? "Approving tokens..."
                       : "Processing purchase..."}
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     {market.options[selectedOptionId!]?.name} • {amount} shares
                   </p>
                 </div>
@@ -1532,17 +1523,17 @@ export function MarketV2BuyInterface({
             )}
 
             {buyingStep === "batchPartialSuccess" && (
-              <div className="text-center py-6 space-y-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
-                <p className="text-base font-medium text-amber-800 dark:text-amber-200">
+              <div className="text-center py-3 space-y-2 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                   Approval successful, but purchase failed.
                 </p>
                 <Button
                   onClick={handleSequentialPurchase}
-                  className="w-full h-12 text-base font-semibold"
+                  className="w-full h-9 text-xs font-medium"
                   disabled={isProcessing}
                 >
                   {isProcessing && (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
                   )}
                   Retry Purchase
                 </Button>
@@ -1550,10 +1541,10 @@ export function MarketV2BuyInterface({
             )}
 
             {buyingStep === "purchaseSuccess" && (
-              <div className="text-center py-6 space-y-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mx-auto">
+              <div className="text-center py-3 space-y-2 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+                <div className="w-8 h-8 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mx-auto">
                   <svg
-                    className="w-6 h-6 text-green-600 dark:text-green-400"
+                    className="w-4 h-4 text-green-600 dark:text-green-400"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1566,12 +1557,12 @@ export function MarketV2BuyInterface({
                     />
                   </svg>
                 </div>
-                <p className="text-base font-semibold text-green-800 dark:text-green-200">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
                   Purchase successful!
                 </p>
                 <Button
                   onClick={resetBuyingInterface}
-                  className="w-full h-12 text-base font-semibold"
+                  className="w-full h-9 text-xs font-medium"
                   variant="default"
                 >
                   Buy More

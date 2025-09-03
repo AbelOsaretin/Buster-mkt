@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useFarcasterUser } from "@/hooks/useFarcasterUser";
 import { Share2 } from "lucide-react";
 import { sdk } from "@farcaster/miniapp-sdk";
+import { ClaimWinningsSection } from "@/components/ClaimWinningsButton";
 
 interface Vote {
   marketId: number;
@@ -653,143 +654,11 @@ export function UserStats() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-white to-gray-50">
-        <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white pb-3 md:pb-6">
-          <CardTitle className="text-lg md:text-xl font-bold">
-            Performance Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 md:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {/* Win Rate Circle */}
-            <div className="flex items-center justify-center">
-              <div className="relative w-24 h-24 md:w-32 md:h-32">
-                <svg
-                  className="w-full h-full transform -rotate-90"
-                  viewBox="0 0 100 100"
-                >
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="transparent"
-                    className="text-gray-200"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    fill="transparent"
-                    strokeDasharray={`${2 * Math.PI * 40}`}
-                    strokeDashoffset={`${
-                      2 * Math.PI * 40 * (1 - stats.winRate / 100)
-                    }`}
-                    className="text-green-500 transition-all duration-1000 ease-out"
-                    style={{
-                      strokeLinecap: "round",
-                    }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-lg md:text-2xl font-bold text-green-600">
-                      {stats.winRate.toFixed(1)}%
-                    </div>
-                    <div className="text-xs text-gray-500">Win Rate</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="space-y-3 md:space-y-4">
-              <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <StatCard
-                  label="Wins"
-                  value={stats.wins}
-                  icon="🎯"
-                  color="text-green-600"
-                  bgColor="bg-green-50"
-                />
-                <StatCard
-                  label="Losses"
-                  value={stats.losses}
-                  icon="❌"
-                  color="text-red-600"
-                  bgColor="bg-red-50"
-                />
-              </div>
-
-              <StatCard
-                label="Total Invested"
-                value={`${formatAmount(stats.totalInvested)} ${tokenSymbol}`}
-                icon="💰"
-                color="text-blue-600"
-                bgColor="bg-blue-50"
-                fullWidth
-              />
-
-              <StatCard
-                label="Net Winnings"
-                value={`${formatAmount(stats.netWinnings)} ${tokenSymbol}`}
-                icon={Number(stats.netWinnings) >= 0 ? "📈" : "📉"}
-                color={
-                  Number(stats.netWinnings) >= 0
-                    ? "text-green-600"
-                    : "text-red-600"
-                }
-                bgColor={
-                  Number(stats.netWinnings) >= 0 ? "bg-green-50" : "bg-red-50"
-                }
-                fullWidth
-              />
-
-              {/* Total P&L (V2 Only) */}
-              {stats.v2Portfolio && (
-                <StatCard
-                  label="Total P&L (V2)"
-                  value={`${formatSignedAmount(
-                    stats.v2Portfolio.realizedPnL +
-                      stats.v2Portfolio.unrealizedPnL
-                  )} ${tokenSymbol}`}
-                  icon={
-                    Number(
-                      stats.v2Portfolio.realizedPnL +
-                        stats.v2Portfolio.unrealizedPnL
-                    ) >= 0
-                      ? "💰"
-                      : "📉"
-                  }
-                  color={
-                    Number(
-                      stats.v2Portfolio.realizedPnL +
-                        stats.v2Portfolio.unrealizedPnL
-                    ) >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
-                  bgColor={
-                    Number(
-                      stats.v2Portfolio.realizedPnL +
-                        stats.v2Portfolio.unrealizedPnL
-                    ) >= 0
-                      ? "bg-green-50"
-                      : "bg-red-50"
-                  }
-                  fullWidth
-                />
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Claim Winnings inserted directly after Profile Header */}
+      <ClaimWinningsSection />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-2 md:gap-4">
+      {/* <div className="grid grid-cols-3 gap-2 md:gap-4">
         <Card className="p-3 md:p-4 text-center border-0 shadow-md bg-gradient-to-br from-blue-50 to-blue-100">
           <div className="text-lg md:text-2xl font-bold text-blue-700">
             {stats.totalVotes}
@@ -818,7 +687,7 @@ export function UserStats() {
           </div>
           <div className="text-xs font-medium text-indigo-600">Avg Bet</div>
         </Card>
-      </div>
+      </div> */}
 
       {/* V1 vs V2 Performance Breakdown */}
       {(stats.v1Markets > 0 || stats.v2Markets > 0) && (

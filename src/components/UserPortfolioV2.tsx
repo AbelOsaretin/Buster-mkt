@@ -257,50 +257,61 @@ export function UserPortfolioV2() {
       // Get recent trades
       const trades: Trade[] = [];
       const tradeCount = Number(portfolioInfo.tradeCount);
-      const recentTradeCount = Math.min(tradeCount, 10); // Last 10 trades
 
-      for (
-        let i = Math.max(0, tradeCount - recentTradeCount);
-        i < tradeCount;
-        i++
-      ) {
-        try {
-          const trade = (await publicClient.readContract({
-            address: V2contractAddress,
-            abi: V2contractAbi,
-            functionName: "userTradeHistory",
-            args: [accountAddress, BigInt(i)],
-          })) as [bigint, bigint, string, string, bigint, bigint, bigint];
+      if (tradeCount > 0) {
+        const recentTradeCount = Math.min(tradeCount, 10); // Last 10 trades
 
-          const [
-            marketId,
-            optionId,
-            buyer,
-            seller,
-            price,
-            quantity,
-            timestamp,
-          ] = trade;
-          const isBuy = buyer.toLowerCase() === accountAddress.toLowerCase();
+        for (
+          let i = Math.max(0, tradeCount - recentTradeCount);
+          i < tradeCount;
+          i++
+        ) {
+          try {
+            const trade = (await publicClient.readContract({
+              address: V2contractAddress,
+              abi: V2contractAbi,
+              functionName: "userTradeHistory",
+              args: [accountAddress, BigInt(i)],
+            })) as [bigint, bigint, string, string, bigint, bigint, bigint];
 
-          // Find market and option names
-          const position = positions.find(
-            (p) => p.marketId === Number(marketId)
-          );
+            const [
+              marketId,
+              optionId,
+              buyer,
+              seller,
+              price,
+              quantity,
+              timestamp,
+            ] = trade;
+            const isBuy = buyer.toLowerCase() === accountAddress.toLowerCase();
 
-          trades.push({
-            marketId: Number(marketId),
-            optionId: Number(optionId),
-            isBuy,
-            quantity,
-            price,
-            timestamp,
-            marketName: position?.marketName || `Market ${marketId}`,
-            optionName:
-              position?.options[Number(optionId)] || `Option ${optionId}`,
-          });
-        } catch (error) {
-          console.error(`Error fetching trade ${i}:`, error);
+            // Find market and option names
+            const position = positions.find(
+              (p) => p.marketId === Number(marketId)
+            );
+
+            trades.push({
+              marketId: Number(marketId),
+              optionId: Number(optionId),
+              isBuy,
+              quantity,
+              price,
+              timestamp,
+              marketName: position?.marketName || `Market ${marketId}`,
+              optionName:
+                position?.options[Number(optionId)] || `Option ${optionId}`,
+            });
+          } catch (error) {
+            console.error(`Error fetching trade ${i}:`, error);
+            // If we get a contract revert, it likely means we've reached the end of available trades
+            // Break the loop to avoid further unnecessary calls
+            if (
+              (error as any)?.message?.includes("reverted") ||
+              (error as any)?.message?.includes("ContractFunctionRevertedError")
+            ) {
+              break;
+            }
+          }
         }
       }
 

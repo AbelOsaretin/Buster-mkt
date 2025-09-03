@@ -206,6 +206,13 @@ export function VoteHistory() {
           });
         } catch (error) {
           console.error(`Failed to fetch trade ${i}:`, error);
+          // If we get a contract revert, it likely means we've reached the end of available trades
+          if (
+            (error as any)?.message?.includes("reverted") ||
+            (error as any)?.message?.includes("ContractFunctionRevertedError")
+          ) {
+            break;
+          }
         }
       }
 

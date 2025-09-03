@@ -266,37 +266,46 @@ export function UserStats() {
           if (v2Portfolio) {
             const tradeCount = Number((v2Portfolio as any).tradeCount || 0);
 
-            // Fetch all trades by index
-            for (let i = 0; i < tradeCount; i++) {
-              try {
-                const trade = await publicClient.readContract({
-                  address: V2contractAddress,
-                  abi: V2contractAbi,
-                  functionName: "userTradeHistory",
-                  args: [address, BigInt(i)],
-                });
-
-                if (trade) {
-                  v2Trades.push({
-                    marketId: Number((trade as any).marketId),
-                    optionId: Number((trade as any).optionId),
-                    buyer: (trade as any).buyer,
-                    seller: (trade as any).seller,
-                    price: BigInt((trade as any).price || 0),
-                    quantity: BigInt((trade as any).quantity || 0),
-                    timestamp: BigInt((trade as any).timestamp || 0),
+            if (tradeCount > 0) {
+              // Fetch all trades by index
+              for (let i = 0; i < tradeCount; i++) {
+                try {
+                  const trade = await publicClient.readContract({
+                    address: V2contractAddress,
+                    abi: V2contractAbi,
+                    functionName: "userTradeHistory",
+                    args: [address, BigInt(i)],
                   });
+
+                  if (trade) {
+                    v2Trades.push({
+                      marketId: Number((trade as any).marketId),
+                      optionId: Number((trade as any).optionId),
+                      buyer: (trade as any).buyer,
+                      seller: (trade as any).seller,
+                      price: BigInt((trade as any).price || 0),
+                      quantity: BigInt((trade as any).quantity || 0),
+                      timestamp: BigInt((trade as any).timestamp || 0),
+                    });
+                  }
+                } catch (innerError) {
+                  console.error(`Failed to fetch V2 trade ${i}:`, innerError);
+                  // If we get a contract revert, it likely means we've reached the end of available trades
+                  if (
+                    (innerError as any)?.message?.includes("reverted") ||
+                    (innerError as any)?.message?.includes(
+                      "ContractFunctionRevertedError"
+                    )
+                  ) {
+                    break;
+                  }
                 }
-              } catch (innerError) {
-                console.error(`Failed to fetch V2 trade ${i}:`, innerError);
               }
             }
           }
         } catch (error) {
           console.warn("V2 trade history error:", error);
-        }
-
-        // Get V2 market IDs from trades
+        } // Get V2 market IDs from trades
         const v2MarketIds = [...new Set(v2Trades.map((t) => t.marketId))];
 
         // Fetch V2 market info for win/loss calculation

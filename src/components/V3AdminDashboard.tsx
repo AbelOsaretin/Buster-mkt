@@ -23,6 +23,7 @@ import { useV3PlatformData } from "@/hooks/useV3PlatformData";
 import { V2contractAddress, V2contractAbi } from "@/constants/contract";
 import { MarketInvalidationManager } from "./MarketInvalidationManager";
 import { LPRewardsManager } from "./LPRewardsManager";
+import { AdminWithdrawalsSection } from "./AdminWithdrawalsSection";
 import {
   Loader2,
   DollarSign,
@@ -388,12 +389,18 @@ export function V3AdminDashboard() {
       </div>
 
       <Tabs defaultValue="fees" className="space-y-3 md:space-y-4 w-full">
-        <TabsList className="w-full h-auto p-1 grid grid-cols-2 md:grid-cols-5 gap-1">
+        <TabsList className="w-full h-auto p-1 grid grid-cols-2 md:grid-cols-6 gap-1">
           <TabsTrigger
             value="fees"
             className="text-xs md:text-sm px-2 py-2 md:px-3"
           >
             Fee Management
+          </TabsTrigger>
+          <TabsTrigger
+            value="withdrawals"
+            className="text-xs md:text-sm px-2 py-2 md:px-3"
+          >
+            Auto Withdrawals
           </TabsTrigger>
           <TabsTrigger
             value="invalidation"
@@ -469,6 +476,11 @@ export function V3AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="withdrawals" className="space-y-3 md:space-y-4">
+          {/* Auto-Discovered Withdrawals */}
+          <AdminWithdrawalsSection />
         </TabsContent>
 
         <TabsContent value="invalidation" className="space-y-3 md:space-y-4">

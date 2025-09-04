@@ -1,0 +1,391 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { V2contractAddress, V2contractAbi } from "@/constants/contract";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Coins, Trophy, DollarSign, Wallet } from "lucide-react";
+import { toast } from "sonner";
+
+interface AdminWithdrawal {
+  marketId: number;
+  amount: bigint;
+  type: "adminLiquidity" | "prizePool" | "lpRewards";
+  description: string;
+}
+
+interface GroupedWithdrawals {
+  adminLiquidity: AdminWithdrawal[];
+  prizePool: AdminWithdrawal[];
+  lpRewards: AdminWithdrawal[];
+}
+
+interface Totals {
+  adminLiquidity: bigint;
+  prizePool: bigint;
+  lpRewards: bigint;
+  total: bigint;
+}
+
+export function AdminWithdrawalsSection() {
+  const { address, isConnected } = useAccount();
+  const [withdrawals, setWithdrawals] = useState<GroupedWithdrawals>({
+    adminLiquidity: [],
+    prizePool: [],
+    lpRewards: [],
+  });
+  const [totals, setTotals] = useState<Totals>({
+    adminLiquidity: 0n,
+    prizePool: 0n,
+    lpRewards: 0n,
+    total: 0n,
+  });
+  const [loading, setLoading] = useState(false);
+
+  // Contract write for withdrawals
+  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  // Auto-discover admin withdrawals
+  const fetchAdminWithdrawals = useCallback(async () => {
+    if (!address) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin-auto-discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userAddress: address }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Auto-discovered admin withdrawals:", data);
+
+        setWithdrawals(
+          data.withdrawals || {
+            adminLiquidity: [],
+            prizePool: [],
+            lpRewards: [],
+          }
+        );
+        setTotals(
+          data.totals || {
+            adminLiquidity: 0n,
+            prizePool: 0n,
+            lpRewards: 0n,
+            total: 0n,
+          }
+        );
+      } else {
+        console.error(
+          "Failed to auto-discover admin withdrawals:",
+          response.statusText
+        );
+        // Reset to empty state
+        setWithdrawals({ adminLiquidity: [], prizePool: [], lpRewards: [] });
+        setTotals({
+          adminLiquidity: 0n,
+          prizePool: 0n,
+          lpRewards: 0n,
+          total: 0n,
+        });
+      }
+    } catch (error) {
+      console.error("Error auto-discovering admin withdrawals:", error);
+      // Reset to empty state
+      setWithdrawals({ adminLiquidity: [], prizePool: [], lpRewards: [] });
+      setTotals({
+        adminLiquidity: 0n,
+        prizePool: 0n,
+        lpRewards: 0n,
+        total: 0n,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [address]);
+
+  // Auto-discover on mount and when address changes
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchAdminWithdrawals();
+    }
+  }, [isConnected, address, fetchAdminWithdrawals]);
+
+  // Handle successful transaction
+  useEffect(() => {
+    if (isSuccess) {
+      toast.success("Withdrawal completed successfully!");
+      // Refresh the data after successful withdrawal
+      fetchAdminWithdrawals();
+    }
+  }, [isSuccess, fetchAdminWithdrawals]);
+
+  // Handle individual withdrawal
+  const handleWithdrawal = async (marketId: number, type: string) => {
+    if (!address) return;
+
+    try {
+      let functionName:
+        | "withdrawAdminLiquidity"
+        | "withdrawUnusedPrizePool"
+        | "claimLPRewards";
+      switch (type) {
+        case "adminLiquidity":
+          functionName = "withdrawAdminLiquidity";
+          break;
+        case "prizePool":
+          functionName = "withdrawUnusedPrizePool";
+          break;
+        case "lpRewards":
+          functionName = "claimLPRewards";
+          break;
+        default:
+          throw new Error("Unknown withdrawal type");
+      }
+
+      writeContract({
+        address: V2contractAddress,
+        abi: V2contractAbi,
+        functionName,
+        args: [BigInt(marketId)],
+      });
+    } catch (error) {
+      console.error("Error initiating withdrawal:", error);
+      toast.error("Failed to initiate withdrawal");
+    }
+  }; // Handle batch withdrawal for a type
+  const handleBatchWithdrawal = async (type: keyof GroupedWithdrawals) => {
+    if (!address || withdrawals[type].length === 0) return;
+
+    try {
+      // Process withdrawals sequentially to avoid gas issues
+      for (const withdrawal of withdrawals[type]) {
+        await handleWithdrawal(withdrawal.marketId, type);
+        // Small delay between transactions
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.error("Error in batch withdrawal:", error);
+      toast.error("Batch withdrawal failed");
+    }
+  };
+
+  if (!isConnected) {
+    return (
+      <Card className="border-orange-200 bg-gradient-to-br from-orange-50 to-yellow-50">
+        <CardContent className="p-6 text-center">
+          <Wallet className="w-12 h-12 mx-auto mb-4 text-orange-600" />
+          <h3 className="font-semibold text-gray-900 mb-2">
+            Admin Withdrawals
+          </h3>
+          <p className="text-sm text-gray-600">
+            Connect your wallet to view available withdrawals
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const formatAmount = (amount: bigint) => {
+    return (Number(amount) / 1e18).toFixed(4);
+  };
+
+  const totalWithdrawals =
+    withdrawals.adminLiquidity.length +
+    withdrawals.prizePool.length +
+    withdrawals.lpRewards.length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Card */}
+      <Card className="border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-green-800">
+            <Coins className="w-5 h-5" />
+            Admin Withdrawals Available
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+              <span className="ml-2 text-sm text-gray-600">
+                Discovering available withdrawals...
+              </span>
+            </div>
+          ) : totalWithdrawals === 0 ? (
+            <div className="text-center py-4">
+              <Coins className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+              <p className="text-gray-600">No withdrawals available</p>
+              <p className="text-sm text-gray-500 mt-1">
+                Check back after creating markets or providing liquidity
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Total Summary */}
+              <div className="bg-green-100 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-800">
+                      Total Available
+                    </p>
+                    <p className="text-2xl font-bold text-green-900">
+                      {formatAmount(totals.total)} $Buster
+                    </p>
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className="bg-green-200 text-green-800"
+                  >
+                    {totalWithdrawals} Withdrawal
+                    {totalWithdrawals !== 1 ? "s" : ""}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Individual Sections */}
+              {withdrawals.adminLiquidity.length > 0 && (
+                <WithdrawalSection
+                  title="Admin Liquidity"
+                  icon={<DollarSign className="w-4 h-4" />}
+                  withdrawals={withdrawals.adminLiquidity}
+                  total={totals.adminLiquidity}
+                  onWithdraw={handleWithdrawal}
+                  onBatchWithdraw={() =>
+                    handleBatchWithdrawal("adminLiquidity")
+                  }
+                  isPending={isPending}
+                  isConfirming={isConfirming}
+                />
+              )}
+
+              {withdrawals.prizePool.length > 0 && (
+                <WithdrawalSection
+                  title="Prize Pool"
+                  icon={<Trophy className="w-4 h-4" />}
+                  withdrawals={withdrawals.prizePool}
+                  total={totals.prizePool}
+                  onWithdraw={handleWithdrawal}
+                  onBatchWithdraw={() => handleBatchWithdrawal("prizePool")}
+                  isPending={isPending}
+                  isConfirming={isConfirming}
+                />
+              )}
+
+              {withdrawals.lpRewards.length > 0 && (
+                <WithdrawalSection
+                  title="LP Rewards"
+                  icon={<Coins className="w-4 h-4" />}
+                  withdrawals={withdrawals.lpRewards}
+                  total={totals.lpRewards}
+                  onWithdraw={handleWithdrawal}
+                  onBatchWithdraw={() => handleBatchWithdrawal("lpRewards")}
+                  isPending={isPending}
+                  isConfirming={isConfirming}
+                />
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Individual withdrawal section component
+function WithdrawalSection({
+  title,
+  icon,
+  withdrawals,
+  total,
+  onWithdraw,
+  onBatchWithdraw,
+  isPending,
+  isConfirming,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  withdrawals: AdminWithdrawal[];
+  total: bigint;
+  onWithdraw: (marketId: number, type: string) => void;
+  onBatchWithdraw: () => void;
+  isPending: boolean;
+  isConfirming: boolean;
+}) {
+  const formatAmount = (amount: bigint) => {
+    return (Number(amount) / 1e18).toFixed(4);
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <Badge variant="outline">{withdrawals.length}</Badge>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-gray-600">
+            Total: {formatAmount(total)} $Buster
+          </p>
+          {withdrawals.length > 1 && (
+            <Button
+              onClick={onBatchWithdraw}
+              disabled={isPending || isConfirming}
+              size="sm"
+              variant="outline"
+              className="mt-1"
+            >
+              Withdraw All
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {withdrawals.map((withdrawal) => (
+          <div
+            key={`${withdrawal.type}-${withdrawal.marketId}`}
+            className="flex items-center justify-between p-3 bg-white rounded-lg border"
+          >
+            <div>
+              <p className="font-medium text-gray-900">
+                Market #{withdrawal.marketId}
+              </p>
+              <p className="text-sm text-gray-600">{withdrawal.description}</p>
+              <p className="text-sm font-medium text-green-600">
+                {formatAmount(withdrawal.amount)} $Buster
+              </p>
+            </div>
+            <Button
+              onClick={() => onWithdraw(withdrawal.marketId, withdrawal.type)}
+              disabled={isPending || isConfirming}
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isPending || isConfirming ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processing...
+                </>
+              ) : (
+                "Withdraw"
+              )}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

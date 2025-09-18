@@ -670,7 +670,7 @@ export async function GET(request: NextRequest) {
                           : market.optionB!,
                         30
                       )
-                    : `Option ${market.winningOptionId + 1}`}
+                    : `Option ${Number(market.winningOptionId) + 1}`}
                 </div>
               </div>
             )}

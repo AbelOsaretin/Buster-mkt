@@ -250,7 +250,7 @@ export function V3AdminDashboard() {
   };
 
   // Format amounts
-  const formatAmount = (amount: bigint | undefined) => {
+  const formatAmount = (amount: bigint | null | undefined) => {
     if (!amount) return "0.00";
     const value = Number(amount) / 10 ** 18;
     return value.toLocaleString(undefined, {
@@ -260,7 +260,7 @@ export function V3AdminDashboard() {
   };
 
   // Format fee rate
-  const formatFeeRate = (rate: bigint | undefined) => {
+  const formatFeeRate = (rate: bigint | null | undefined) => {
     if (!rate) return "0.00";
     return (Number(rate) / 100).toFixed(2);
   };

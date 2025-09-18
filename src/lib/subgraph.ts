@@ -1,4 +1,4 @@
-import { GraphQLClient } from "graphql-request";
+import { GraphQLClient, gql } from "graphql-request";
 
 // Your deployed subgraph URL
 const SUBGRAPH_URL =
@@ -7,9 +7,14 @@ const SUBGRAPH_URL =
 
 export const subgraphClient = new GraphQLClient(SUBGRAPH_URL);
 
-// GraphQL queries for V3 entities
-export const GET_MARKETS = `
-  query GetMarkets($first: Int!, $skip: Int!, $orderBy: String!, $orderDirection: String!) {
+// GraphQL queries for V3 entities (using gql for better parsing)
+export const GET_MARKETS = gql`
+  query GetMarkets(
+    $first: Int!
+    $skip: Int!
+    $orderBy: String!
+    $orderDirection: String!
+  ) {
     markets(
       first: $first
       skip: $skip
@@ -42,7 +47,7 @@ export const GET_MARKETS = `
   }
 `;
 
-export const GET_MARKET_BY_ID = `
+export const GET_MARKET_BY_ID = gql`
   query GetMarketById($id: ID!) {
     market(id: $id) {
       id
@@ -71,8 +76,14 @@ export const GET_MARKET_BY_ID = `
   }
 `;
 
-export const GET_TRADES_BY_MARKET = `
-  query GetTradesByMarket($marketId: String!, $first: Int!, $skip: Int!, $orderBy: String!, $orderDirection: String!) {
+export const GET_TRADES_BY_MARKET = gql`
+  query GetTradesByMarket(
+    $marketId: String!
+    $first: Int!
+    $skip: Int!
+    $orderBy: String!
+    $orderDirection: String!
+  ) {
     trades(
       where: { market: $marketId }
       first: $first
@@ -95,7 +106,7 @@ export const GET_TRADES_BY_MARKET = `
   }
 `;
 
-export const GET_USER_PORTFOLIO = `
+export const GET_USER_PORTFOLIO = gql`
   query GetUserPortfolio($user: ID!) {
     userPortfolio(id: $user) {
       id
@@ -109,8 +120,15 @@ export const GET_USER_PORTFOLIO = `
   }
 `;
 
-export const GET_PRICE_HISTORY = `
-  query GetPriceHistory($marketId: String!, $optionId: BigInt!, $first: Int!, $skip: Int!, $orderBy: String!, $orderDirection: String!) {
+export const GET_PRICE_HISTORY = gql`
+  query GetPriceHistory(
+    $marketId: String!
+    $optionId: BigInt!
+    $first: Int!
+    $skip: Int!
+    $orderBy: String!
+    $orderDirection: String!
+  ) {
     priceHistories(
       where: { market: $marketId, optionId: $optionId }
       first: $first
@@ -130,9 +148,14 @@ export const GET_PRICE_HISTORY = `
   }
 `;
 
-export const GET_MARKET_ANALYTICS = `
+export const GET_MARKET_ANALYTICS = gql`
   query GetMarketAnalytics($marketId: String!) {
-    sharesPurchaseds(where: { market: $marketId }, first: 1000, orderBy: "blockNumber", orderDirection: "asc") {
+    sharesPurchaseds(
+      where: { market: $marketId }
+      first: 1000
+      orderBy: "blockNumber"
+      orderDirection: "asc"
+    ) {
       id
       market {
         id
@@ -156,6 +179,187 @@ export const GET_MARKET_ANALYTICS = `
   }
 `;
 
+// Production-ready functions (CEI: Check inputs, perform effect/query, handle interactions)
+export async function getMarkets(
+  first: number,
+  skip: number,
+  orderBy: string,
+  orderDirection: string
+): Promise<Market[]> {
+  // Check: Validate inputs to prevent invalid queries
+  if (
+    first <= 0 ||
+    skip < 0 ||
+    !["asc", "desc"].includes(orderDirection.toLowerCase())
+  ) {
+    throw new Error("Invalid pagination or order parameters");
+  }
+
+  // Effects: Perform the GraphQL request
+  try {
+    const data = await subgraphClient.request<{ markets: Market[] }>(
+      GET_MARKETS,
+      {
+        first,
+        skip,
+        orderBy,
+        orderDirection,
+      }
+    );
+
+    // Interactions: Return typed data safely
+    return data.markets || [];
+  } catch (error) {
+    console.error("Error fetching markets from subgraph:", error);
+    throw new Error("Failed to fetch markets");
+  }
+}
+
+export async function getMarketById(id: string): Promise<Market | null> {
+  // Check: Validate input
+  if (!id || typeof id !== "string") {
+    throw new Error("Valid market ID is required");
+  }
+
+  // Effects: Perform the request
+  try {
+    const data = await subgraphClient.request<{ market: Market | null }>(
+      GET_MARKET_BY_ID,
+      { id }
+    );
+
+    // Interactions: Return data
+    return data.market;
+  } catch (error) {
+    console.error("Error fetching market by ID:", error);
+    throw new Error("Failed to fetch market");
+  }
+}
+
+export async function getTradesByMarket(
+  marketId: string,
+  first: number,
+  skip: number,
+  orderBy: string,
+  orderDirection: string
+): Promise<Trade[]> {
+  // Check: Validate inputs
+  if (
+    !marketId ||
+    first <= 0 ||
+    skip < 0 ||
+    !["asc", "desc"].includes(orderDirection.toLowerCase())
+  ) {
+    throw new Error("Invalid market ID or pagination parameters");
+  }
+
+  // Effects: Perform the request
+  try {
+    const data = await subgraphClient.request<{ trades: Trade[] }>(
+      GET_TRADES_BY_MARKET,
+      {
+        marketId,
+        first,
+        skip,
+        orderBy,
+        orderDirection,
+      }
+    );
+
+    // Interactions: Return data
+    return data.trades || [];
+  } catch (error) {
+    console.error("Error fetching trades:", error);
+    throw new Error("Failed to fetch trades");
+  }
+}
+
+export async function getUserPortfolio(
+  user: string
+): Promise<UserPortfolio | null> {
+  // Check: Validate input (assume Ethereum address format)
+  if (!user || !/^0x[a-fA-F0-9]{40}$/.test(user)) {
+    throw new Error("Valid user address is required");
+  }
+
+  // Effects: Perform the request
+  try {
+    const data = await subgraphClient.request<{
+      userPortfolio: UserPortfolio | null;
+    }>(GET_USER_PORTFOLIO, { user });
+
+    // Interactions: Return data
+    return data.userPortfolio;
+  } catch (error) {
+    console.error("Error fetching user portfolio:", error);
+    throw new Error("Failed to fetch user portfolio");
+  }
+}
+
+export async function getPriceHistory(
+  marketId: string,
+  optionId: string,
+  first: number,
+  skip: number,
+  orderBy: string,
+  orderDirection: string
+): Promise<PriceHistory[]> {
+  // Check: Validate inputs
+  if (
+    !marketId ||
+    !optionId ||
+    first <= 0 ||
+    skip < 0 ||
+    !["asc", "desc"].includes(orderDirection.toLowerCase())
+  ) {
+    throw new Error("Invalid parameters for price history");
+  }
+
+  // Effects: Perform the request
+  try {
+    const data = await subgraphClient.request<{
+      priceHistories: PriceHistory[];
+    }>(GET_PRICE_HISTORY, {
+      marketId,
+      optionId: BigInt(optionId), // Ensure BigInt for GraphQL
+      first,
+      skip,
+      orderBy,
+      orderDirection,
+    });
+
+    // Interactions: Return data
+    return data.priceHistories || [];
+  } catch (error) {
+    console.error("Error fetching price history:", error);
+    throw new Error("Failed to fetch price history");
+  }
+}
+
+export async function getMarketAnalytics(
+  marketId: string
+): Promise<MarketAnalyticsData> {
+  // Check: Validate input
+  if (!marketId) {
+    throw new Error("Market ID is required");
+  }
+
+  // Effects: Perform the request
+  try {
+    const data = await subgraphClient.request<MarketAnalyticsData>(
+      GET_MARKET_ANALYTICS,
+      { marketId }
+    );
+
+    // Interactions: Return data
+    return data;
+  } catch (error) {
+    console.error("Error fetching market analytics:", error);
+    throw new Error("Failed to fetch market analytics");
+  }
+}
+
+// Interfaces (unchanged, matching queries)
 export interface Market {
   id: string;
   question: string;

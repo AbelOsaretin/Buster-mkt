@@ -386,7 +386,11 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
           isResolved ? (
             <MarketResolved
               marketId={index}
-              outcome={market.winningOptionId + 1} // Adjust for legacy component
+              outcome={
+                typeof market.winningOptionId !== "undefined"
+                  ? Number(market.winningOptionId) + 1
+                  : 0
+              }
               optionA={options[0]?.name || "Option 1"}
               optionB={options[1]?.name || "Option 2"}
             />

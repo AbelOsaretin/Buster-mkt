@@ -359,7 +359,7 @@ export function MarketDetailsClient({
                     endTime: market.endTime,
                     category: convertToMarketCategory(market.category),
                     marketType: 0, // PAID market type
-                    optionCount: market.options?.length || 2,
+                    optionCount: BigInt(market.options?.length || 2),
                     options: (market.options || []).map((option, index) => ({
                       name: option || `Option ${index + 1}`,
                       description: option || `Option ${index + 1}`,
@@ -372,7 +372,9 @@ export function MarketDetailsClient({
                     disputed: market.disputed || false,
                     validated: true,
                     invalidated: false,
-                    winningOptionId: market.resolved ? market.outcome : 0,
+                    winningOptionId: BigInt(
+                      market.resolved ? market.outcome ?? 0 : 0
+                    ),
                     creator:
                       market.creator ||
                       "0x0000000000000000000000000000000000000000",
@@ -416,7 +418,7 @@ export function MarketDetailsClient({
                     endTime: market.endTime,
                     category: convertToMarketCategory(market.category),
                     marketType: 0, // PAID market type
-                    optionCount: market.options?.length || 2,
+                    optionCount: BigInt(market.options?.length || 2),
                     options: (market.options || []).map((option, index) => ({
                       name: option || `Option ${index + 1}`,
                       description: option || `Option ${index + 1}`,
@@ -429,7 +431,9 @@ export function MarketDetailsClient({
                     disputed: market.disputed || false,
                     validated: true,
                     invalidated: false,
-                    winningOptionId: market.resolved ? market.outcome : 0,
+                    winningOptionId: BigInt(
+                      market.resolved ? market.outcome ?? 0 : 0
+                    ),
                     creator:
                       market.creator ||
                       "0x0000000000000000000000000000000000000000",

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
   useAccount,
-  useWriteContract,
+  useSendCalls,
   useWaitForTransactionReceipt,
   useReadContract,
 } from "wagmi";
@@ -110,11 +110,7 @@ export function CreateMarketV2() {
   const [earlyResolutionAllowed, setEarlyResolutionAllowed] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [transactionPhase, setTransactionPhase] = useState<
-    "idle" | "approving" | "creating"
-  >("idle");
   const [marketCreated, setMarketCreated] = useState(false);
-  const [marketCreationParams, setMarketCreationParams] = useState<any>(null);
 
   // Gas estimation state
   const [estimatedGas, setEstimatedGas] = useState<bigint | null>(null);
@@ -123,89 +119,39 @@ export function CreateMarketV2() {
 
   // Transaction hooks
   const {
-    writeContract,
-    data: writeData,
-    error: writeError,
-    isPending: writePending,
-  } = useWriteContract();
+    sendCalls,
+    data: sendCallsData,
+    error: sendCallsError,
+    isPending: sendCallsPending,
+  } = useSendCalls();
 
-  const {
-    writeContract: writeApprovalContract,
-    data: approvalData,
-    error: approvalError,
-    isPending: approvalPending,
-  } = useWriteContract();
-
-  // Watch approval transaction
-  const { isLoading: approvalLoading, isSuccess: approvalSuccess } =
+  // Watch batch transaction
+  const { isLoading: batchLoading, isSuccess: batchSuccess } =
     useWaitForTransactionReceipt({
-      hash: approvalData,
-    });
-
-  // Watch market creation transaction
-  const { isLoading: marketLoading, isSuccess: marketSuccess } =
-    useWaitForTransactionReceipt({
-      hash: writeData,
+      hash: sendCallsData?.id as `0x${string}` | undefined,
     });
 
   // Handle transaction failures
   useEffect(() => {
-    if (writeError || approvalError) {
-      console.error("❌ Transaction failed:", writeError || approvalError);
+    if (sendCallsError) {
+      console.error("❌ Batch transaction failed:", sendCallsError);
       setIsSubmitting(false);
-      setTransactionPhase("idle");
       toast({
         title: "Transaction Failed",
-        description: `Failed to ${
-          transactionPhase === "approving" ? "approve tokens" : "create market"
-        }: ${(writeError || approvalError)?.message}`,
+        description: `Failed to create market: ${sendCallsError.message}`,
         variant: "destructive",
       });
     }
-  }, [writeError, approvalError, toast, transactionPhase]);
+  }, [sendCallsError, toast]);
 
   // Handle transaction success
   useEffect(() => {
-    if (approvalSuccess && transactionPhase === "approving") {
-      console.log("✅ Approval transaction confirmed!");
-      setTransactionPhase("creating");
-    } else if (marketSuccess && transactionPhase === "creating") {
-      console.log("🎉 Market creation transaction confirmed successfully!");
+    if (batchSuccess) {
+      console.log("🎉 Batch transaction confirmed successfully!");
       setIsSubmitting(false);
-      setTransactionPhase("idle");
       setMarketCreated(true);
     }
-  }, [approvalSuccess, marketSuccess, transactionPhase]);
-
-  // Handle market creation after approval
-  useEffect(() => {
-    if (
-      marketCreationParams &&
-      ((approvalSuccess && transactionPhase === "approving") ||
-        (transactionPhase === "creating" && !approvalSuccess))
-    ) {
-      console.log("🚀 Sending market creation transaction...");
-      // Log the outgoing transaction payload (inputs + encoded calldata)
-      try {
-        console.log("🧾 marketCreationParams:", marketCreationParams);
-        const calldata = encodeFunctionData({
-          abi: V2contractAbi,
-          functionName: marketCreationParams.functionName as any,
-          args: marketCreationParams.args as any,
-        });
-        console.log("🔐 Encoded calldata for writeContract:", calldata);
-      } catch (logErr) {
-        console.warn("Failed to encode calldata for logging:", logErr);
-      }
-
-      writeContract({
-        address: V2contractAddress,
-        abi: V2contractAbi,
-        ...marketCreationParams,
-      });
-      setMarketCreationParams(null);
-    }
-  }, [marketCreationParams, approvalSuccess, transactionPhase, writeContract]);
+  }, [batchSuccess]);
 
   // Check token allowance
   const { data: allowanceData } = useReadContract({
@@ -477,136 +423,119 @@ export function CreateMarketV2() {
       const optionNames = options.map((opt) => opt.name);
       const optionDescriptions = options.map((opt) => opt.description);
 
-      // Estimate gas for market creation
-      const createArgs =
-        marketType === MarketType.FREE_ENTRY
-          ? {
-              address: V2contractAddress,
-              abi: V2contractAbi,
-              functionName: "createFreeMarket",
-              args: [
-                question,
-                description,
-                optionNames,
-                optionDescriptions,
-                BigInt(durationInSeconds),
-                category,
-                BigInt(maxFreeParticipants),
-                parseEther(freeSharesPerUser),
-                liquidityWei,
-                earlyResolutionAllowed,
-              ],
-              account: address,
-            }
-          : {
-              address: V2contractAddress,
-              abi: V2contractAbi,
-              functionName: "createMarket",
-              args: [
-                question,
-                description,
-                optionNames,
-                optionDescriptions,
-                BigInt(durationInSeconds),
-                category,
-                marketType,
-                liquidityWei,
-                earlyResolutionAllowed,
-              ],
-              account: address,
-            };
-
-      // Build calldata and ask the provider to estimate gas (use encodeFunctionData)
-      try {
-        const txData = encodeFunctionData({
-          abi: V2contractAbi,
-          functionName: createArgs.functionName as any,
-          // encodeFunctionData expects a strongly-typed tuple; cast to any here
-          args: createArgs.args as any,
-        });
-
-        // Log full inputs and calldata for debugging (user-requested)
-        console.log("🔎 createArgs for gas estimation:", {
-          functionName: createArgs.functionName,
-          args: createArgs.args,
-        });
-        console.log("🔐 Encoded calldata:", txData);
-
-        if (typeof window !== "undefined" && window.ethereum) {
-          const provider = window.ethereum as any;
-          const estimate: string = await provider.request({
-            method: "eth_estimateGas",
-            params: [
-              {
-                to: V2contractAddress,
-                data: txData,
-                from: address || undefined,
-              },
-            ],
-          });
-          // estimate may be hex string; convert to BigInt
-          setEstimatedGas(BigInt(estimate));
-        }
-      } catch (e) {
-        // If provider estimation fails, surface the error but continue to fetch gasPrice
-        console.warn("Gas estimation via provider failed:", e);
-        // If provider returned encoded revert data, log it to help decode the reason
-        try {
-          // Some providers return nested `data` on the error
-          // @ts-expect-error - provider error shape varies by wallet implementation
-          if (e && e.data) console.warn("Provider error data:", e.data);
-        } catch {}
-        // Try an eth_call to capture revert data (if any) for decoding
-        try {
-          if (typeof window !== "undefined" && window.ethereum) {
-            const provider = window.ethereum as any;
-            // Recreate calldata to ensure availability
-            const txDataRetry = encodeFunctionData({
-              abi: V2contractAbi,
-              functionName: createArgs.functionName as any,
-              args: createArgs.args as any,
-            });
-            const callResult = await provider.request({
-              method: "eth_call",
-              params: [
-                {
-                  to: V2contractAddress,
-                  data: txDataRetry,
-                  from: address || undefined,
-                },
-                "latest",
-              ],
-            });
-            console.warn(
-              "eth_call result (may contain revert data):",
-              callResult
-            );
-          }
-        } catch (callErr) {
-          console.warn("eth_call failed to return revert data:", callErr);
-        }
-        setEstimatedGas(null);
+      // Calculate required approval amount
+      let requiredApproval = liquidityWei;
+      if (marketType === MarketType.FREE_ENTRY) {
+        const tokensPerUser = parseEther(freeSharesPerUser);
+        const maxParticipants = BigInt(maxFreeParticipants);
+        const totalPrizePool = tokensPerUser * maxParticipants;
+        requiredApproval = liquidityWei + totalPrizePool;
       }
 
-      // Also estimate gas price
+      // Prepare batch calls for gas estimation
+      const calls = [];
+
+      // Add approval call if needed
+      if (requiredApproval > currentAllowance) {
+        calls.push({
+          to: tokenAddress as `0x${string}`,
+          data: encodeFunctionData({
+            abi: tokenAbi,
+            functionName: "approve",
+            args: [V2contractAddress, requiredApproval],
+          }),
+        });
+      }
+
+      // Add market creation call
+      const createMarketCall =
+        marketType === MarketType.FREE_ENTRY
+          ? {
+              to: V2contractAddress as `0x${string}`,
+              data: encodeFunctionData({
+                abi: V2contractAbi,
+                functionName: "createFreeMarket",
+                args: [
+                  question,
+                  description,
+                  optionNames,
+                  optionDescriptions,
+                  BigInt(durationInSeconds),
+                  category,
+                  BigInt(maxFreeParticipants),
+                  parseEther(freeSharesPerUser),
+                  liquidityWei,
+                  earlyResolutionAllowed,
+                ],
+              }),
+            }
+          : {
+              to: V2contractAddress as `0x${string}`,
+              data: encodeFunctionData({
+                abi: V2contractAbi,
+                functionName: "createMarket",
+                args: [
+                  question,
+                  description,
+                  optionNames,
+                  optionDescriptions,
+                  BigInt(durationInSeconds),
+                  category,
+                  marketType,
+                  liquidityWei,
+                  earlyResolutionAllowed,
+                ],
+              }),
+            };
+
+      calls.push(createMarketCall);
+
+      console.log("🔎 Estimating gas for batch with", calls.length, "calls");
+
+      // Estimate gas for each call individually and sum them
+      let totalGasEstimate = 0n;
+
       if (typeof window !== "undefined" && window.ethereum) {
         const provider = window.ethereum as any;
+
+        for (const call of calls) {
+          try {
+            const estimate: string = await provider.request({
+              method: "eth_estimateGas",
+              params: [
+                {
+                  to: call.to,
+                  data: call.data,
+                  from: address || undefined,
+                },
+              ],
+            });
+            totalGasEstimate += BigInt(estimate);
+          } catch (e) {
+            console.warn("Gas estimation failed for call:", call, e);
+          }
+        }
+
+        setEstimatedGas(totalGasEstimate);
+
+        // Also estimate gas price
         const gasPriceEstimate = await provider.request({
           method: "eth_gasPrice",
         });
         setGasPrice(BigInt(gasPriceEstimate));
       }
 
-      console.log("⛽ Gas estimation completed:", {
-        gasLimit: estimatedGas?.toString(),
+      console.log("⛽ Batch gas estimation completed:", {
+        totalGasLimit: totalGasEstimate.toString(),
         gasPrice: gasPrice?.toString(),
+        callsCount: calls.length,
       });
     } catch (error) {
       console.error("❌ Gas estimation failed:", error);
       toast({
         title: "Gas Estimation Failed",
         description:
-          "Could not estimate transaction cost. The transaction may be too large.",
+          "Could not estimate batch transaction cost. The transaction may be too large.",
         variant: "destructive",
       });
     } finally {
@@ -615,7 +544,7 @@ export function CreateMarketV2() {
   };
 
   const handleSubmit = async () => {
-    console.log("🚀 Starting market creation process...");
+    console.log("🚀 Starting batch market creation process...");
     console.log("📝 Form data:", {
       question,
       description,
@@ -630,16 +559,6 @@ export function CreateMarketV2() {
       freeSharesPerUser:
         marketType === MarketType.FREE_ENTRY ? freeSharesPerUser : "N/A",
     });
-    console.log("🏁 Early Resolution Allowed:", earlyResolutionAllowed);
-
-    // Debug authorization
-    console.log("🔐 Authorization Status:");
-    console.log("  - Address:", address);
-    console.log("  - Has Creator Role:", hasCreatorRole);
-    console.log("  - Is Owner:", isOwner);
-    console.log("  - Contract Owner:", contractOwner);
-    console.log("  - Has Market Creation Auth:", hasMarketCreationAuth);
-    console.log("  - Legacy Has Creator Access:", hasCreatorAccess);
 
     if (!validateForm()) {
       console.error("❌ Form validation failed");
@@ -668,12 +587,7 @@ export function CreateMarketV2() {
     }
 
     // Prevent multiple submissions
-    if (
-      isSubmitting ||
-      writePending ||
-      (transactionPhase === "approving" && approvalLoading) ||
-      (transactionPhase === "creating" && marketLoading)
-    ) {
+    if (isSubmitting || sendCallsPending || batchLoading) {
       console.warn(
         "⏳ Transaction already in progress, blocking new submission"
       );
@@ -687,7 +601,6 @@ export function CreateMarketV2() {
 
     console.log("🔄 Setting submission state to true");
     setIsSubmitting(true);
-    setTransactionPhase("idle");
     setMarketCreated(false);
 
     try {
@@ -697,24 +610,11 @@ export function CreateMarketV2() {
       const optionNames = options.map((opt) => opt.name);
       const optionDescriptions = options.map((opt) => opt.description);
 
-      console.log("🔢 Calculated values:", {
-        durationInSeconds,
-        liquidityWei: liquidityWei.toString(),
-        optionNames,
-        optionDescriptions,
-      });
-
       // Calculate required approval amount based on market type
       let requiredApproval = liquidityWei;
-      console.log(
-        "💰 Initial required approval (liquidity):",
-        requiredApproval.toString()
-      );
 
       if (marketType === MarketType.FREE_ENTRY) {
         console.log("🎁 Processing free market configuration...");
-        // For free markets, we need to calculate total cost: liquidity + prize pool
-        // Add safety checks for empty inputs
         if (!freeSharesPerUser.trim() || !maxFreeParticipants.trim()) {
           console.error("❌ Empty free market fields during submission");
           setIsSubmitting(false);
@@ -726,88 +626,99 @@ export function CreateMarketV2() {
           return;
         }
 
-        try {
-          console.log("🧮 Calculating free market costs...");
-          const tokensPerUser = parseEther(freeSharesPerUser);
-          const maxParticipants = BigInt(maxFreeParticipants);
-          console.log("Tokens per user (wei):", tokensPerUser.toString());
-          console.log("Max participants:", maxParticipants.toString());
-
-          const totalPrizePool = tokensPerUser * maxParticipants;
-          console.log("Total prize pool (wei):", totalPrizePool.toString());
-
-          requiredApproval = liquidityWei + totalPrizePool;
-          console.log(
-            "💰 Updated required approval (liquidity + prize pool):",
-            requiredApproval.toString()
-          );
-          console.log(
-            "💎 Prize pool amount:",
-            totalPrizePool.toString(),
-            "BUSTER"
-          );
-        } catch (error) {
-          console.error("❌ Error calculating free market costs:", error);
-          setIsSubmitting(false);
-          toast({
-            title: "Error",
-            description: "Invalid values in free market configuration",
-            variant: "destructive",
-          });
-          return;
-        }
+        const tokensPerUser = parseEther(freeSharesPerUser);
+        const maxParticipants = BigInt(maxFreeParticipants);
+        const totalPrizePool = tokensPerUser * maxParticipants;
+        requiredApproval = liquidityWei + totalPrizePool;
+        console.log("💰 Total required approval:", requiredApproval.toString());
       }
 
       // Check if user has sufficient balance
-      console.log("💳 Checking user balance...");
-      console.log("User balance:", userBalance.toString(), "wei");
-      console.log("Required approval:", requiredApproval.toString(), "wei");
-      console.log(
-        "User balance (formatted):",
-        (Number(userBalance) / 1e18).toLocaleString(),
-        "BUSTER"
-      );
-      console.log(
-        "Required (formatted):",
-        (Number(requiredApproval) / 1e18).toLocaleString(),
-        "BUSTER"
-      );
-
       if (userBalance < requiredApproval) {
         console.error("❌ Insufficient balance");
         setIsSubmitting(false);
         const requiredTokens = Number(requiredApproval) / 1e18;
         const currentTokens = Number(userBalance) / 1e18;
-        const isFreeMarket = marketType === MarketType.FREE_ENTRY;
-        const extraMessage = isFreeMarket
-          ? " Note: Free markets require tokens for both initial liquidity and the prize pool."
-          : "";
         toast({
           title: "Insufficient Balance",
-          description: `You need ${requiredTokens.toLocaleString()} BUSTER tokens but only have ${currentTokens.toLocaleString()}. Please get more tokens to create this market.${extraMessage}`,
+          description: `You need ${requiredTokens.toLocaleString()} BUSTER tokens but only have ${currentTokens.toLocaleString()}.`,
           variant: "destructive",
         });
         return;
       }
 
-      console.log("✅ Balance check passed");
+      // Prepare batch calls
+      const calls = [];
 
-      // Always use fallback transaction method for reliability
-      console.log("🔄 Using fallback transaction method...");
-      await handleFallbackTransaction(
-        requiredApproval,
-        liquidityWei,
-        durationInSeconds,
-        optionNames,
-        optionDescriptions
-      );
+      // Add approval call if needed
+      if (requiredApproval > currentAllowance) {
+        console.log("� Adding approval to batch...");
+        calls.push({
+          to: tokenAddress as `0x${string}`,
+          data: encodeFunctionData({
+            abi: tokenAbi,
+            functionName: "approve",
+            args: [V2contractAddress, requiredApproval],
+          }),
+        });
+      }
+
+      // Add market creation call
+      console.log("🏗️ Adding market creation to batch...");
+      const createMarketCall =
+        marketType === MarketType.FREE_ENTRY
+          ? {
+              to: V2contractAddress as `0x${string}`,
+              data: encodeFunctionData({
+                abi: V2contractAbi,
+                functionName: "createFreeMarket",
+                args: [
+                  question,
+                  description,
+                  optionNames,
+                  optionDescriptions,
+                  BigInt(durationInSeconds),
+                  category,
+                  BigInt(maxFreeParticipants),
+                  parseEther(freeSharesPerUser),
+                  liquidityWei,
+                  earlyResolutionAllowed,
+                ],
+              }),
+            }
+          : {
+              to: V2contractAddress as `0x${string}`,
+              data: encodeFunctionData({
+                abi: V2contractAbi,
+                functionName: "createMarket",
+                args: [
+                  question,
+                  description,
+                  optionNames,
+                  optionDescriptions,
+                  BigInt(durationInSeconds),
+                  category,
+                  marketType,
+                  liquidityWei,
+                  earlyResolutionAllowed,
+                ],
+              }),
+            };
+
+      calls.push(createMarketCall);
+
+      console.log("📦 Sending batch transaction with", calls.length, "calls");
+      console.log("� Batch calls:", calls);
+
+      // Send batch transaction
+      await sendCalls({ calls });
+
+      toast({
+        title: "Transaction Sent",
+        description: "Creating market with batch transaction...",
+      });
     } catch (error: any) {
       console.error("❌ Fatal error creating market:", error);
-      console.error("Error details:", {
-        message: error?.message,
-        stack: error?.stack,
-        cause: error?.cause,
-      });
       toast({
         title: "Error",
         description: `Failed to create market: ${
@@ -817,84 +728,6 @@ export function CreateMarketV2() {
       });
       setIsSubmitting(false);
     }
-  };
-
-  const handleFallbackTransaction = async (
-    requiredApproval: bigint,
-    liquidityWei: bigint,
-    durationInSeconds: number,
-    optionNames: string[],
-    optionDescriptions: string[]
-  ) => {
-    console.log("🔄 Starting fallback transaction...");
-    console.log("Fallback transaction parameters:", {
-      requiredApproval: requiredApproval.toString(),
-      liquidityWei: liquidityWei.toString(),
-      currentAllowance: currentAllowance.toString(),
-    });
-
-    // Handle approval if needed
-    if (requiredApproval > currentAllowance) {
-      console.log("🔐 Approval needed, sending approval transaction...");
-      setTransactionPhase("approving");
-      writeApprovalContract({
-        address: tokenAddress,
-        abi: tokenAbi,
-        functionName: "approve",
-        args: [V2contractAddress, requiredApproval],
-      });
-      console.log("✅ Approval transaction sent, waiting for confirmation...");
-
-      toast({
-        title: "Approval Sent",
-        description: "Waiting for approval confirmation...",
-      });
-
-      // The useEffect will handle the success and transition to creating phase
-    } else {
-      console.log("✅ Allowance sufficient, proceeding with market creation");
-      setTransactionPhase("creating");
-    }
-
-    const createArgs =
-      marketType === MarketType.FREE_ENTRY
-        ? {
-            functionName: "createFreeMarket",
-            args: [
-              question,
-              description,
-              optionNames,
-              optionDescriptions,
-              BigInt(durationInSeconds),
-              category,
-              BigInt(maxFreeParticipants),
-              parseEther(freeSharesPerUser),
-              liquidityWei,
-              earlyResolutionAllowed,
-            ],
-          }
-        : {
-            functionName: "createMarket",
-            args: [
-              question,
-              description,
-              optionNames,
-              optionDescriptions,
-              BigInt(durationInSeconds),
-              category,
-              marketType,
-              liquidityWei,
-              earlyResolutionAllowed,
-            ],
-          };
-
-    setMarketCreationParams(createArgs);
-
-    console.log("✅ Market creation parameters set successfully!");
-    toast({
-      title: "Transaction Sent",
-      description: "Creating market...",
-    });
   };
 
   const resetForm = () => {
@@ -911,9 +744,7 @@ export function CreateMarketV2() {
     setMaxFreeParticipants("3");
     setFreeSharesPerUser("100");
     setIsSubmitting(false);
-    setTransactionPhase("idle");
     setMarketCreated(false);
-    setMarketCreationParams(null);
   };
 
   if (!isConnected) {
@@ -1437,8 +1268,8 @@ export function CreateMarketV2() {
                 onClick={handleSubmit}
                 disabled={
                   isSubmitting ||
-                  writePending ||
-                  approvalPending ||
+                  sendCallsPending ||
+                  batchLoading ||
                   (() => {
                     try {
                       const liquidity = parseEther(initialLiquidity || "0");
@@ -1462,11 +1293,7 @@ export function CreateMarketV2() {
                 }
                 className="min-w-[120px]"
               >
-                {isSubmitting ||
-                writePending ||
-                approvalPending ||
-                (transactionPhase === "approving" && approvalLoading) ||
-                (transactionPhase === "creating" && marketLoading) ? (
+                {isSubmitting || sendCallsPending || batchLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Processing...

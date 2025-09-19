@@ -7,11 +7,6 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import {
-  subgraphClient,
-  GET_MARKETS,
-  Market as MarketEntity,
-} from "@/lib/subgraph";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -49,8 +44,11 @@ interface PendingMarket {
   optionCount: bigint;
   category: number;
   validated: boolean;
+  invalidated: boolean;
   resolved: boolean;
-  options: string[];
+  disputed: boolean;
+  totalVolume: bigint;
+  earlyResolutionAllowed: boolean;
 }
 
 const MARKET_CATEGORIES = [
@@ -79,23 +77,110 @@ export function MarketValidationManager() {
     null
   );
 
-  // Load markets from subgraph
+  // Load markets from V2 contract directly
+  const {
+    data: marketCount,
+    isLoading: isLoadingCount,
+    refetch: refetchCount,
+  } = useQuery({
+    queryKey: ["marketCount"],
+    queryFn: async () => {
+      const count = await publicClient.readContract({
+        address: V2contractAddress as `0x${string}`,
+        abi: V2contractAbi,
+        functionName: "marketCount",
+      });
+      return Number(count);
+    },
+    enabled: isConnected,
+    refetchInterval: 30000,
+  });
+
+  // Fetch market details from contract
   const {
     data: marketsData,
     isLoading: isLoadingMarkets,
     refetch: refetchMarkets,
   } = useQuery({
-    queryKey: ["marketsList"],
+    queryKey: ["contractMarkets", marketCount],
     queryFn: async () => {
-      const resp = (await subgraphClient.request(GET_MARKETS, {
-        first: 500,
-        skip: 0,
-        orderBy: "createdAt",
-        orderDirection: "desc",
-      })) as any;
-      return resp.markets as MarketEntity[];
+      if (!marketCount || marketCount === 0) return [];
+
+      const markets: PendingMarket[] = [];
+
+      // Fetch markets in batches to avoid RPC limits
+      const batchSize = 20;
+      for (let i = 0; i < marketCount; i += batchSize) {
+        const promises = [];
+        const endIndex = Math.min(i + batchSize, marketCount);
+
+        for (let j = i; j < endIndex; j++) {
+          promises.push(
+            publicClient.readContract({
+              address: V2contractAddress as `0x${string}`,
+              abi: V2contractAbi,
+              functionName: "getMarketInfo",
+              args: [BigInt(j)],
+            })
+          );
+        }
+
+        const batchResults = await Promise.all(promises);
+
+        batchResults.forEach((result, index) => {
+          const marketId = i + index;
+          const [
+            question,
+            description,
+            endTime,
+            category,
+            optionCount,
+            resolved,
+            winningOptionId,
+            disputed,
+            validated,
+            invalidated,
+            totalVolume,
+            creator,
+            earlyResolutionAllowed,
+          ] = result as [
+            string,
+            string,
+            bigint,
+            number,
+            bigint,
+            boolean,
+            bigint,
+            boolean,
+            boolean,
+            boolean,
+            bigint,
+            string,
+            boolean
+          ];
+
+          markets.push({
+            marketId,
+            question,
+            description,
+            creator,
+            createdAt: BigInt(0), // We don't have creation time from this call
+            endTime,
+            optionCount,
+            category,
+            validated,
+            invalidated,
+            resolved,
+            disputed,
+            totalVolume,
+            earlyResolutionAllowed,
+          });
+        });
+      }
+
+      return markets;
     },
-    enabled: isConnected,
+    enabled: isConnected && typeof marketCount === "number" && marketCount > 0,
     refetchInterval: 30000,
   });
 
@@ -106,39 +191,55 @@ export function MarketValidationManager() {
       hash,
     });
 
-  // Map subgraph markets to pending/validated lists
+  // Debug logging for markets data
   useEffect(() => {
-    const mapAndSet = (items?: MarketEntity[]) => {
+    console.log("🔍 Contract markets data:", {
+      marketCount,
+      marketsData,
+      isLoadingCount,
+      isLoadingMarkets,
+      isConnected,
+      dataLength: marketsData?.length || 0,
+    });
+  }, [marketCount, marketsData, isLoadingCount, isLoadingMarkets, isConnected]);
+
+  // Map contract markets to pending/validated lists
+  useEffect(() => {
+    const mapAndSet = (items?: PendingMarket[]) => {
       if (!items) return;
       setIsLoading(true);
       try {
-        const mapped: PendingMarket[] = items.map((m) => ({
-          marketId: Number(m.id),
-          question: m.question,
-          description: m.description || "",
-          creator: m.creator,
-          createdAt: BigInt(Number(m.createdAt || Date.now())),
-          endTime: BigInt(Number(m.endTime || 0)),
-          optionCount: BigInt(m.options ? m.options.length : 0),
-          category: Number(m.category || 0),
-          validated: false, // subgraph currently doesn't expose validated flag; keep false so admins can validate on-chain
-          resolved: !!m.resolved,
-          options: m.options || [],
-        }));
+        // Filter markets based on actual contract validation status
+        const pending = items.filter(
+          (m) => !m.validated && !m.invalidated && !m.resolved
+        );
 
-        const pending = mapped.filter((p) => !p.validated && !p.resolved);
-        const validated = mapped.filter((p) => p.validated);
+        const validated = items.filter((m) => m.validated || m.resolved);
 
-        pending.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
-        validated.sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+        // Sort by market ID (newer markets have higher IDs)
+        pending.sort((a, b) => b.marketId - a.marketId);
+        validated.sort((a, b) => b.marketId - a.marketId);
 
         setPendingMarkets(pending);
         setValidatedMarkets(validated);
+
+        console.log("📊 Market validation data from contract:", {
+          total: items.length,
+          pending: pending.length,
+          validated: validated.length,
+          firstFewPending: pending.slice(0, 3).map((p) => ({
+            id: p.marketId,
+            question: p.question,
+            validated: p.validated,
+            invalidated: p.invalidated,
+            resolved: p.resolved,
+          })),
+        });
       } catch (err) {
-        console.error("Error mapping markets:", err);
+        console.error("Error mapping contract markets:", err);
         toast({
           title: "Error",
-          description: "Failed to load markets.",
+          description: "Failed to load markets from contract.",
           variant: "destructive",
         });
       } finally {
@@ -146,10 +247,15 @@ export function MarketValidationManager() {
       }
     };
 
-    mapAndSet(marketsData as MarketEntity[] | undefined);
-  }, [marketsData]);
+    mapAndSet(marketsData);
+  }, [marketsData, toast]);
 
-  // We no longer fetch details on-chain per-market here; subgraph has options and metadata already.
+  // We no longer fetch details on-chain per-market here; we get all details directly from getMarketInfo
+
+  const handleRefresh = () => {
+    refetchCount();
+    refetchMarkets();
+  };
 
   const handleValidateMarket = async (marketId: number) => {
     if (!hasValidatorAccess) {
@@ -185,23 +291,18 @@ export function MarketValidationManager() {
 
   useEffect(() => {
     if (isConnected) {
+      refetchCount();
       refetchMarkets();
     }
-  }, [isConnected]);
+  }, [isConnected, refetchCount, refetchMarkets]);
 
   useEffect(() => {
     if (isConfirmed) {
       // Refresh markets after successful validation
-      setTimeout(() => refetchMarkets(), 2000);
+      setTimeout(() => handleRefresh(), 2000);
       setSelectedMarket(null);
     }
   }, [isConfirmed]);
-
-  const formatCreationTime = (timestamp: bigint) => {
-    return formatDistanceToNow(new Date(Number(timestamp)), {
-      addSuffix: true,
-    });
-  };
 
   const formatEndTime = (timestamp: bigint) => {
     return new Date(Number(timestamp) * 1000).toLocaleDateString();
@@ -251,12 +352,16 @@ export function MarketValidationManager() {
           </p>
         </div>
         <Button
-          onClick={() => refetchMarkets()}
-          disabled={isLoading}
+          onClick={() => handleRefresh()}
+          disabled={isLoadingCount || isLoadingMarkets}
           variant="outline"
           className="flex items-center gap-2"
         >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${
+              isLoadingCount || isLoadingMarkets ? "animate-spin" : ""
+            }`}
+          />
           Refresh
         </Button>
       </div>
@@ -272,6 +377,11 @@ export function MarketValidationManager() {
                 </p>
                 <p className="text-2xl font-bold text-orange-600">
                   {pendingMarkets.length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isLoadingCount || isLoadingMarkets
+                    ? "Loading..."
+                    : "Active markets"}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-orange-600" />
@@ -289,6 +399,11 @@ export function MarketValidationManager() {
                 <p className="text-2xl font-bold text-green-600">
                   {validatedMarkets.length}
                 </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isLoadingCount || isLoadingMarkets
+                    ? "Loading..."
+                    : "Resolved markets"}
+                </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
@@ -302,8 +417,11 @@ export function MarketValidationManager() {
                 <p className="text-sm font-medium text-muted-foreground">
                   Total Markets
                 </p>
-                <p className="text-2xl font-bold">
-                  {marketsData ? marketsData.length : "0"}
+                <p className="text-2xl font-bold">{marketCount || "0"}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isLoadingCount || isLoadingMarkets
+                    ? "Loading..."
+                    : "From contract"}
                 </p>
               </div>
               <FileText className="h-8 w-8 text-blue-600" />
@@ -338,7 +456,7 @@ export function MarketValidationManager() {
 
       {/* Markets List */}
       <div className="space-y-4">
-        {isLoading ? (
+        {isLoadingCount || isLoadingMarkets ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
               <Card key={i} className="animate-pulse">
@@ -420,11 +538,11 @@ export function MarketValidationManager() {
                               </div>
                               <div>
                                 <span className="text-gray-500 flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  Created:
+                                  <Hash className="h-3 w-3" />
+                                  Market ID:
                                 </span>
                                 <p className="font-medium">
-                                  {formatCreationTime(market.createdAt)}
+                                  #{market.marketId}
                                 </p>
                               </div>
                               <div>
@@ -441,30 +559,29 @@ export function MarketValidationManager() {
                               </div>
                             </div>
 
-                            {/* Market Options Preview */}
-                            {market.options.length > 0 && (
-                              <div className="mb-4">
-                                <p className="text-sm text-gray-500 mb-2">
-                                  Options:
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                  {market.options.map((option, index) => (
-                                    <Badge key={index} variant="outline">
-                                      {option}
-                                    </Badge>
-                                  ))}
-                                  {Number(market.optionCount) >
-                                    market.options.length && (
-                                    <Badge variant="outline">
-                                      +
-                                      {Number(market.optionCount) -
-                                        market.options.length}{" "}
-                                      more
-                                    </Badge>
-                                  )}
-                                </div>
+                            {/* Market Info */}
+                            <div className="mb-4">
+                              <p className="text-sm text-gray-500 mb-2">
+                                Market Details:
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline">
+                                  {Number(market.optionCount)} options
+                                </Badge>
+                                <Badge variant="outline">
+                                  Volume: {Number(market.totalVolume) / 1e18}{" "}
+                                  tokens
+                                </Badge>
+                                {market.disputed && (
+                                  <Badge variant="destructive">Disputed</Badge>
+                                )}
+                                {market.earlyResolutionAllowed && (
+                                  <Badge variant="outline">
+                                    Early Resolution
+                                  </Badge>
+                                )}
                               </div>
-                            )}
+                            </div>
 
                             <Separator className="my-4" />
 
@@ -565,10 +682,10 @@ export function MarketValidationManager() {
                               </div>
                               <div>
                                 <span className="text-gray-500">
-                                  Validated:
+                                  Market ID:
                                 </span>
                                 <p className="font-medium">
-                                  {formatCreationTime(market.createdAt)}
+                                  #{market.marketId}
                                 </p>
                               </div>
                               <div>

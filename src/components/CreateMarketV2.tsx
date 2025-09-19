@@ -118,6 +118,9 @@ export function CreateMarketV2() {
     isPending: callsPending,
   } = useSendCalls();
 
+  // Check if batch transactions are supported by the current wallet
+  const supportsBatchTransactions = !!sendCalls;
+
   // Defensive extraction of calls id - some connectors/providers may return unexpected shapes
   const callsId =
     callsData && typeof callsData === "object" && "id" in callsData
@@ -534,12 +537,14 @@ export function CreateMarketV2() {
 
       console.log("✅ Balance check passed");
 
-      // Try batch transaction first, fallback to regular transactions if it fails
+      // Try batch transaction first if supported, fallback to regular transactions if it fails or isn't supported
       console.log(
         "🔄 Choosing transaction method - Fallback mode:",
-        useFallbackTransaction
+        useFallbackTransaction,
+        "Supports batch:",
+        supportsBatchTransactions
       );
-      if (!useFallbackTransaction) {
+      if (!useFallbackTransaction && supportsBatchTransactions) {
         console.log("🔄 Attempting batch transaction...");
         try {
           await handleBatchTransaction(
@@ -720,6 +725,9 @@ export function CreateMarketV2() {
     console.log("Current allowance:", currentAllowance.toString());
 
     console.log("🚀 Sending batch calls to wallet...");
+    if (!sendCalls) {
+      throw new Error("Batch transactions not supported by wallet");
+    }
     await sendCalls({ calls });
     console.log("✅ Batch calls sent successfully!");
 

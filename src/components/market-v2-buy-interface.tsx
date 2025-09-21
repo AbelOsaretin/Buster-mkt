@@ -278,9 +278,7 @@ export function MarketV2BuyInterface({
   // Using current price from optionData for estimation
   const estimatedCost =
     optionData && amount
-      ? ((optionData[4] as bigint) *
-          toUnits(amount || "0", tokenDecimals || 18)) /
-        BigInt(10 ** 18)
+      ? (optionData[4] as bigint) * BigInt(parseFloat(amount || "0"))
       : 0n;
 
   // Fetch market info for validation
@@ -297,37 +295,22 @@ export function MarketV2BuyInterface({
   }, []);
 
   // Check if market is validated
-  const checkMarketValidation = useCallback(async () => {
-    try {
-      // We'll try to simulate a purchase to see if it throws MarketNotValidated
-      await publicClient.estimateContractGas({
-        address: V2contractAddress,
-        abi: V2contractAbi,
-        functionName: "buyShares",
-        args: [
-          BigInt(marketId),
-          BigInt(0),
-          BigInt(1),
-          BigInt(1000000),
-          BigInt(1000000),
-        ], // Try to buy 1 share of option 0 with max price and max total cost 1000000
-        account: "0x0000000000000000000000000000000000000001", // Dummy account
-      });
-      setIsValidated(true); // If no error, market is validated
-    } catch (error: any) {
-      // Check if the error is specifically MarketNotValidated
-      if (
-        error?.message?.includes("MarketNotValidated") ||
-        error?.shortMessage?.includes("MarketNotValidated") ||
-        error?.details?.includes("MarketNotValidated")
-      ) {
-        setIsValidated(false);
-      } else {
-        // For other errors (like insufficient funds, invalid option, etc.), assume validated
-        setIsValidated(true);
-      }
+  const checkMarketValidation = useCallback(() => {
+    if (marketInfo && marketInfo.length > 8) {
+      // Check the validated field directly from market info (index 8 based on debug output)
+      const isValidated = marketInfo[8] as boolean;
+      console.log(
+        "Market validation check:",
+        isValidated,
+        "Market info:",
+        marketInfo
+      );
+      setIsValidated(isValidated);
+    } else {
+      // If marketInfo is not available yet, keep checking
+      setIsValidated(null);
     }
-  }, [marketId]);
+  }, [marketInfo]);
 
   // Handle direct purchase (for cases where approval already exists)
   const handleDirectPurchase = useCallback(async () => {
@@ -368,6 +351,18 @@ export function MarketV2BuyInterface({
         ? (estimatedCost * BigInt(1e18)) / amountInUnits
         : optionData?.[4] || 0n;
       const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
+
+      console.log("=== V2 DIRECT PURCHASE DEBUG ===");
+      console.log("Market ID:", marketId);
+      console.log("Selected option ID:", selectedOptionId);
+      console.log("Amount in units:", amountInUnits.toString());
+      console.log("Estimated cost:", estimatedCost?.toString());
+      console.log("Required balance:", requiredBalance.toString());
+      console.log("User balance:", userBalance?.toString());
+      console.log("Avg price per share:", avgPricePerShare.toString());
+      console.log("Max price per share:", maxPricePerShare.toString());
+      console.log("Market info:", marketInfo);
+      console.log("Option data:", optionData);
 
       console.log("=== V2 BATCH PURCHASE ===");
       console.log("Amount in units:", amountInUnits.toString());
@@ -1225,12 +1220,16 @@ export function MarketV2BuyInterface({
   // Show validation notice if market is not validated
   if (isValidated === false) {
     return (
-      <div className="w-full">
-        <ValidationNotice
-          marketId={marketId}
-          status="pending"
-          message="This market is waiting for admin validation before accepting predictions. Please check back later."
-        />
+      <div className="w-full p-4 text-center bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-700">
+        <div className="text-yellow-800 dark:text-yellow-200">
+          <h3 className="font-medium text-sm mb-2">
+            Market Pending Validation
+          </h3>
+          <p className="text-xs">
+            This market is waiting for admin validation before accepting
+            predictions. Please check back later.
+          </p>
+        </div>
       </div>
     );
   }

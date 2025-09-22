@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { marketId, userAddress } = body;
 
-    // Accept marketId = 0 (falsy in JS), so explicitly check for null/undefined.
+    // Accept marketId = 0 (falsy in JS), so explicitly check for null/undefined.//
     if (
       marketId === undefined ||
       marketId === null ||
@@ -35,14 +35,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has winnings for this market
-    const result = await publicClient.readContract({
+    const params: any = {
       address: V2contractAddress,
       abi: V2contractAbi,
       functionName: "getUserWinnings",
       args: [BigInt(marketIdNum), userAddress as `0x${string}`],
-    });
+    };
 
-    const [hasWinnings, amount] = result as [boolean, bigint];
+    const result = (await (publicClient.readContract as any)(
+      params
+    )) as unknown;
+
+    const resArr = result as readonly any[];
+    const hasWinnings = Boolean(resArr[0]);
+    const amount = BigInt(resArr[1] ?? 0n);
 
     return NextResponse.json({
       hasWinnings,

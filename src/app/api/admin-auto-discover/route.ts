@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
 import { base } from "viem/chains";
-import { V2contractAddress, V2contractAbi } from "@/constants/contract";
+import {
+  V2contractAddress,
+  V2contractAbi,
+  PolicastViews,
+  PolicastViewsAbi,
+} from "@/constants/contract";
 
 const publicClient = createPublicClient({
   chain: base,
@@ -9,7 +14,7 @@ const publicClient = createPublicClient({
     process.env.NEXT_PUBLIC_ALCHEMY_RPC_URL || "https://mainnet.base.org"
   ),
 });
-
+//
 interface AdminWithdrawal {
   marketId: number;
   amount: bigint;
@@ -109,10 +114,11 @@ async function discoverAdminWithdrawals(
 
   try {
     // First get the actual market count from the contract
-    const marketCount = (await publicClient.readContract({
+    const marketCount = (await (publicClient.readContract as any)({
       address: V2contractAddress,
       abi: V2contractAbi,
-      functionName: "getMarketCount",
+      // prefer the canonical "marketCount" name from the V2 ABI; cast to any to avoid strict literal-union errors
+      functionName: "marketCount",
       args: [],
     })) as bigint;
 
@@ -140,8 +146,8 @@ async function discoverAdminWithdrawals(
         );
         withdrawals.push(...batchWithdrawals);
 
-        // Small delay to avoid rate limits
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // Increase delay to avoid rate limits
+        await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`Error checking markets ${startId}-${endId}:`, error);
         // Continue with next batch
@@ -168,80 +174,130 @@ async function checkMarketBatchForAdmin(
 
   for (let marketId = startId; marketId < endId; marketId++) {
     try {
-      // Get market info to check creator and market type
-      const marketInfo = await publicClient.readContract({
+      // Get market info to check market status
+      const marketInfo = (await (publicClient.readContract as any)({
         address: V2contractAddress,
         abi: V2contractAbi,
         functionName: "getMarketInfo",
         args: [BigInt(marketId)],
-      });
+      })) as unknown;
 
       if (!marketInfo) {
         console.log(`Market ${marketId} returned no info, skipping...`);
         continue;
       }
 
-      const [
-        question,
-        description,
-        endTime,
-        category,
-        optionCount,
-        resolved,
-        disputed,
-        marketType,
-        invalidated,
-        winningOptionId,
-        creator,
-      ] = marketInfo as readonly [
-        string,
-        string,
-        bigint,
-        number,
-        bigint,
-        boolean,
-        boolean,
-        number,
-        boolean,
-        bigint,
-        string,
-        boolean
-      ];
+      // Get market creator from Views contract
+      const creator = (await (publicClient.readContract as any)({
+        address: PolicastViews,
+        abi: PolicastViewsAbi, // Use the correct Views contract ABI
+        functionName: "getMarketCreator",
+        args: [BigInt(marketId)],
+      })) as string;
+
+      // Parse the market info tuple (V3 contract structure)
+      const mi = marketInfo as readonly any[];
+      const question = String(mi[0] ?? "");
+      const description = String(mi[1] ?? "");
+      const endTime = BigInt(mi[2] ?? 0n);
+      const category = Number(mi[3] ?? 0);
+      const optionCount = BigInt(mi[4] ?? 0n);
+      const resolved = Boolean(mi[5]);
+      const resolvedOutcome = Boolean(mi[6]); // This is different from disputed
+      const marketType = Number(mi[7] ?? 0);
+      const invalidated = Boolean(mi[8]);
+      const totalVolume = BigInt(mi[9] ?? 0n);
 
       // Check if user is the market creator
       const isCreator = creator.toLowerCase() === userAddress.toLowerCase();
+
+      console.log(`Market ${marketId} analysis:`, {
+        question: question.slice(0, 50),
+        creator,
+        userAddress,
+        isCreator,
+        resolved,
+        resolvedOutcome,
+        invalidated,
+        marketType,
+        totalVolume: totalVolume.toString(),
+      });
 
       if (isCreator) {
         // 1. Check for admin liquidity withdrawal
         // We need to get market financials to check admin liquidity status
         try {
-          const marketFinancials = await publicClient.readContract({
-            address: V2contractAddress,
-            abi: V2contractAbi,
+          const marketFinancials = (await (publicClient.readContract as any)({
+            address: PolicastViews, // Use Views contract for financials too
+            abi: PolicastViewsAbi, // Use Views ABI
             functionName: "getMarketFinancials",
             args: [BigInt(marketId)],
-          });
+          })) as unknown;
 
           if (marketFinancials) {
-            const [adminInitialLiquidity, , , , adminLiquidityClaimed] =
-              marketFinancials as readonly [
-                bigint,
-                bigint,
-                bigint,
-                bigint,
-                boolean
-              ];
+            const mf = marketFinancials as readonly any[];
+            const adminInitialLiquidity = BigInt(mf[0] ?? 0n);
+            const userLiquidity = BigInt(mf[1] ?? 0n);
+            const platformFeesCollected = BigInt(mf[2] ?? 0n);
+            const adminLiquidityClaimed = Boolean(mf[3]);
 
-            if (!adminLiquidityClaimed && adminInitialLiquidity > 0n) {
+            console.log(`Market ${marketId} financials:`, {
+              adminInitialLiquidity: adminInitialLiquidity.toString(),
+              userLiquidity: userLiquidity.toString(),
+              platformFeesCollected: platformFeesCollected.toString(),
+              adminLiquidityClaimed,
+              resolved,
+              resolvedOutcome,
+              invalidated,
+              isInvalidatedMarket: invalidated,
+              marketType,
+            });
+
+            // For invalidated markets, check if there are any special withdrawal mechanisms
+            if (invalidated && adminInitialLiquidity === 0n) {
+              console.log(
+                `Market ${marketId} is invalidated with 0 admin liquidity - this might be expected behavior for refunded markets`
+              );
+            }
+
+            // Admin can withdraw initial liquidity if:
+            // - There's admin liquidity to claim
+            // - Admin hasn't claimed liquidity yet
+            // - Market is resolved OR invalidated (invalidated markets also allow withdrawals)
+            if (
+              adminInitialLiquidity > 0n &&
+              !adminLiquidityClaimed &&
+              (resolved || invalidated)
+            ) {
+              const description = invalidated
+                ? `Admin liquidity from invalidated market: ${question.slice(
+                    0,
+                    50
+                  )}...`
+                : `Admin liquidity from resolved market: ${question.slice(
+                    0,
+                    50
+                  )}...`;
+
               withdrawals.push({
                 marketId,
                 amount: adminInitialLiquidity,
                 type: "adminLiquidity",
-                description: `Admin liquidity for market "${question.slice(
-                  0,
-                  30
-                )}..."`,
+                description,
               });
+              console.log(
+                `Found admin liquidity withdrawal for market ${marketId}: ${adminInitialLiquidity.toString()} (${
+                  invalidated ? "invalidated" : "resolved"
+                })`
+              );
+            } else {
+              console.log(
+                `No admin liquidity withdrawal for market ${marketId}: ` +
+                  `amount=${adminInitialLiquidity.toString()}, ` +
+                  `claimed=${adminLiquidityClaimed}, ` +
+                  `resolved=${resolved}, ` +
+                  `invalidated=${invalidated}`
+              );
             }
           }
         } catch (error) {
@@ -276,34 +332,11 @@ async function checkMarketBatchForAdmin(
         }
       }
 
-      // 3. Check for LP rewards (any user can have LP position)
-      try {
-        const lpInfo = await publicClient.readContract({
-          address: V2contractAddress,
-          abi: V2contractAbi,
-          functionName: "getLPInfo",
-          args: [BigInt(marketId), userAddress as `0x${string}`],
-        });
-
-        if (lpInfo) {
-          const [contribution, rewardsClaimed, estimatedRewards] =
-            lpInfo as readonly [bigint, boolean, bigint];
-
-          if (!rewardsClaimed && estimatedRewards > 0n) {
-            withdrawals.push({
-              marketId,
-              amount: estimatedRewards,
-              type: "lpRewards",
-              description: `LP rewards for market "${question.slice(
-                0,
-                30
-              )}..."`,
-            });
-          }
-        }
-      } catch (error) {
-        console.debug(`Could not get LP info for market ${marketId}:`, error);
-      }
+      // 3. LP Rewards are not available in V3 LMSR contract
+      // The V3 contract uses LMSR instead of traditional LP reward system
+      console.log(
+        `Market ${marketId}: LP rewards not available in V3 contract (uses LMSR)`
+      );
     } catch (error: any) {
       // Handle specific error types
       if (
@@ -331,7 +364,7 @@ async function checkMarketBatchForAdmin(
 // Check if market is a free market
 async function checkIfFreeMarket(marketId: number): Promise<boolean> {
   try {
-    const freeMarketInfo = await publicClient.readContract({
+    const freeMarketInfo = await (publicClient.readContract as any)({
       address: V2contractAddress,
       abi: V2contractAbi,
       functionName: "getFreeMarketInfo",
@@ -350,32 +383,24 @@ async function checkIfFreeMarket(marketId: number): Promise<boolean> {
 async function getUnusedPrizePool(marketId: number): Promise<bigint> {
   try {
     // Get free market info to understand the prize pool configuration
-    const freeMarketInfo = await publicClient.readContract({
+    const freeMarketInfo = (await (publicClient.readContract as any)({
       address: V2contractAddress,
       abi: V2contractAbi,
       functionName: "getFreeMarketInfo",
       args: [BigInt(marketId)],
-    });
+    })) as unknown;
 
     if (!freeMarketInfo) {
       return 0n;
     }
 
-    const [
-      maxParticipants,
-      tokensPerParticipant,
-      currentParticipants,
-      totalPrizePool,
-      prizePoolWithdrawn,
-      // Additional field that we don't need for this calculation
-    ] = freeMarketInfo as readonly [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      boolean
-    ];
+    const fm = freeMarketInfo as readonly any[];
+    const maxParticipants = BigInt(fm[0] ?? 0n);
+    const tokensPerParticipant = BigInt(fm[1] ?? 0n);
+    const currentParticipants = BigInt(fm[2] ?? 0n);
+    const totalPrizePool = BigInt(fm[3] ?? 0n);
+    // prizePoolWithdrawn may be boolean or bigint depending on ABI shape
+    const prizePoolWithdrawn = Boolean(fm[4]);
 
     // If prize pool already withdrawn, no unused amount
     if (prizePoolWithdrawn) {

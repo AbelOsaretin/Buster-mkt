@@ -47,13 +47,13 @@ export interface MarketV2 {
   endTime: bigint;
   category: MarketCategory;
   marketType: MarketType;
-  optionCount: number;
+  optionCount: bigint;
   options: MarketOption[];
   resolved: boolean;
   disputed: boolean;
   validated: boolean;
   invalidated: boolean; // Market has been invalidated by admin
-  winningOptionId: number;
+  winningOptionId: bigint;
   creator: string;
   createdAt: bigint;
   // V3 Financial Tracking
@@ -93,7 +93,7 @@ export interface UserPortfolio {
   totalWinnings: bigint;
   unrealizedPnL: bigint;
   realizedPnL: bigint;
-  tradeCount: number;
+  tradeCount: bigint;
 }
 
 // Trade data structure from contract
@@ -117,7 +117,7 @@ export interface PricePoint {
 // V2 Market Stats from Contract
 export interface MarketStatsV2 {
   totalVolume: bigint;
-  participantCount: number;
+  participantCount: bigint;
   averagePrice: bigint;
   priceVolatility: bigint;
   lastTradePrice: bigint;

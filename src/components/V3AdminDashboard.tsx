@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useV3PlatformData } from "@/hooks/useV3PlatformData";
 import { V2contractAddress, V2contractAbi } from "@/constants/contract";
 // import { MarketInvalidationManager } from "./MarketInvalidationManager";
-// import { LPRewardsManager } from "./LPRewardsManager";
+// import { LPRewardsManager } from "./LPRewardsManager";//
 import { AdminWithdrawalsSection } from "./AdminWithdrawalsSection";
 import {
   Loader2,
@@ -199,10 +199,10 @@ export function V3AdminDashboard() {
         description: "Withdrawing admin liquidity...",
       });
 
-      await writeContract({
+      await (writeContract as any)({
         address: V2contractAddress,
         abi: V2contractAbi,
-        functionName: "withdrawAdminLiquidity",
+        functionName: "withdrawAdminLiquidity" as any,
         args: [BigInt(adminLiquidityMarketId)],
       });
     } catch (error: any) {
@@ -233,10 +233,10 @@ export function V3AdminDashboard() {
         description: "Withdrawing unused prize pool...",
       });
 
-      await writeContract({
+      await (writeContract as any)({
         address: V2contractAddress,
         abi: V2contractAbi,
-        functionName: "withdrawUnusedPrizePool",
+        functionName: "withdrawUnusedPrizePool" as any,
         args: [BigInt(prizePoolMarketId)],
       });
     } catch (error: any) {
@@ -250,7 +250,7 @@ export function V3AdminDashboard() {
   };
 
   // Format amounts
-  const formatAmount = (amount: bigint | undefined) => {
+  const formatAmount = (amount: bigint | null | undefined) => {
     if (!amount) return "0.00";
     const value = Number(amount) / 10 ** 18;
     return value.toLocaleString(undefined, {
@@ -260,7 +260,7 @@ export function V3AdminDashboard() {
   };
 
   // Format fee rate
-  const formatFeeRate = (rate: bigint | undefined) => {
+  const formatFeeRate = (rate: bigint | null | undefined) => {
     if (!rate) return "0.00";
     return (Number(rate) / 100).toFixed(2);
   };

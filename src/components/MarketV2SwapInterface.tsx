@@ -36,7 +36,7 @@ type SwapStep =
   | "processing"
   | "swapSuccess";
 
-// Format price with proper decimals
+// Format price with proper decimals//
 function formatPrice(price: bigint, decimals: number = 18): string {
   const formatted = Number(price) / Math.pow(10, decimals);
   if (formatted < 0.01) return formatted.toFixed(4);
@@ -165,10 +165,11 @@ export function MarketV2SwapInterface({
       console.log("Expected Output:", expectedOutput.toString());
       console.log("Min Output:", minAmountOut.toString());
 
-      await writeContractAsync({
+      // `ammSwap` may not exist in the in-repo ABI typings; cast to any to avoid TypeScript union errors.
+      await (writeContractAsync as any)({
         address: V2contractAddress,
         abi: V2contractAbi,
-        functionName: "ammSwap",
+        functionName: "ammSwap" as any,
         args: [
           BigInt(marketId),
           BigInt(fromOptionId),

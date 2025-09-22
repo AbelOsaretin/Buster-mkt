@@ -32,7 +32,7 @@ import {
   Loader2,
   XCircle,
 } from "lucide-react";
-
+//
 interface MarketInfo {
   id: number;
   question: string;
@@ -97,25 +97,12 @@ export function MarketInvalidationManager() {
     setIsChecking(true);
     try {
       // Get market info
-      const marketData = (await publicClient.readContract({
+      const marketData = (await (publicClient.readContract as any)({
         address: V2contractAddress,
         abi: V2contractAbi,
         functionName: "getMarketInfo",
         args: [BigInt(id)],
-      })) as readonly [
-        string,
-        string,
-        bigint,
-        number,
-        bigint,
-        boolean,
-        boolean,
-        number,
-        boolean,
-        bigint,
-        string,
-        boolean
-      ];
+      })) as unknown as readonly any[];
 
       setMarketInfo({
         id,

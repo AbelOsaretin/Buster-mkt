@@ -124,26 +124,67 @@ export async function fetchV1Market(marketId: number): Promise<Market> {
 
 // Fetch V2 market data
 export async function fetchV2Market(marketId: number): Promise<MarketV2> {
-  const marketInfo = await publicClient.readContract({
+  const marketInfoRaw = await publicClient.readContract({
     address: V2contractAddress,
     abi: V2contractAbi,
     functionName: "getMarketInfo",
     args: [BigInt(marketId)],
   });
 
-  const [
-    question,
-    description,
-    endTime,
-    category,
-    optionCount,
-    resolved,
-    disputed,
-    marketType,
-    invalidated,
-    winningOptionId,
-    creator,
-  ] = marketInfo;
+  const marketInfoArr = marketInfoRaw as unknown as readonly any[];
+
+  // The V2 `getMarketInfo` shape has changed across versions. Support both
+  // legacy (short) and newer (long) tuple shapes by checking length and
+  // mapping indices defensively.
+  let question = "";
+  let description = "";
+  let endTime: bigint = 0n;
+  let category: MarketCategory = 0 as MarketCategory;
+  let optionCount: bigint = 0n;
+  let resolved = false;
+  let disputed = false;
+  let marketTypeValue: number = 0;
+  let invalidated = false;
+  let validated = false;
+  let totalVolume: bigint = 0n;
+  let winningOptionId: bigint = 0n;
+  let creator = "";
+  let earlyResolutionAllowed = false;
+
+  if (marketInfoArr.length >= 13) {
+    // Newer V2 shape (13+ entries)
+    // Based on V2 contract ABI:
+    // 0: question, 1: description, 2: endTime, 3: category, 4: optionCount,
+    // 5: resolved, 6: winningOptionId, 7: disputed, 8: validated, 9: invalidated,
+    // 10: totalVolume, 11: creator, 12: earlyResolutionAllowed
+    question = String(marketInfoArr[0] ?? "");
+    description = String(marketInfoArr[1] ?? "");
+    endTime = BigInt(marketInfoArr[2] ?? 0n);
+    category = Number(marketInfoArr[3] ?? 0) as MarketCategory;
+    optionCount = BigInt(marketInfoArr[4] ?? 0n);
+    resolved = Boolean(marketInfoArr[5]);
+    winningOptionId = BigInt(marketInfoArr[6] ?? 0n);
+    disputed = Boolean(marketInfoArr[7]);
+    // Note: validated is at index 8, invalidated is at index 9
+    validated = Boolean(marketInfoArr[8]);
+    invalidated = Boolean(marketInfoArr[9]);
+    totalVolume = BigInt(marketInfoArr[10] ?? 0n);
+    creator = String(marketInfoArr[11] ?? "");
+    earlyResolutionAllowed = Boolean(marketInfoArr[12]);
+  } else {
+    // Legacy/shorter shape used previously
+    question = String(marketInfoArr[0] ?? "");
+    description = String(marketInfoArr[1] ?? "");
+    endTime = BigInt(marketInfoArr[2] ?? 0n);
+    category = Number(marketInfoArr[3] ?? 0) as MarketCategory;
+    optionCount = BigInt(marketInfoArr[4] ?? 0n);
+    resolved = Boolean(marketInfoArr[5]);
+    disputed = Boolean(marketInfoArr[6]);
+    marketTypeValue = Number(marketInfoArr[7] ?? 0);
+    invalidated = Boolean(marketInfoArr[8]);
+    totalVolume = BigInt(marketInfoArr[9] ?? 0n);
+    // winningOptionId / creator / earlyResolutionAllowed not present in legacy
+  }
 
   // Fetch all options
   const options: MarketOption[] = [];
@@ -160,18 +201,18 @@ export async function fetchV2Market(marketId: number): Promise<MarketV2> {
         name,
         optionDescription,
         totalShares,
-        totalVolume,
+        optionTotalVolume,
         currentPrice,
         isActive,
-      ] = optionData;
+      ] = optionData as readonly any[];
 
       options.push({
-        name,
-        description: optionDescription,
-        totalShares,
-        totalVolume,
-        currentPrice,
-        isActive,
+        name: String(name ?? ""),
+        description: String(optionDescription ?? ""),
+        totalShares: BigInt(totalShares ?? 0n),
+        totalVolume: BigInt(optionTotalVolume ?? 0n),
+        currentPrice: BigInt(currentPrice ?? 0n),
+        isActive: Boolean(isActive),
       });
     } catch (error) {
       console.error(`Error fetching option ${i}:`, error);
@@ -192,20 +233,20 @@ export async function fetchV2Market(marketId: number): Promise<MarketV2> {
     description,
     endTime,
     category: category as MarketCategory,
-    marketType: marketType as MarketType,
-    optionCount: Number(optionCount),
+    marketType: marketTypeValue as MarketType,
+    optionCount: optionCount,
     options,
     resolved,
     disputed,
-    validated: true, // Assume validated if we can fetch it
-    invalidated: invalidated as boolean,
-    earlyResolutionAllowed: false,
-    winningOptionId: Number(winningOptionId),
+    validated,
+    invalidated,
+    earlyResolutionAllowed,
+    winningOptionId,
     creator,
     createdAt: 0n, // Not available in basic market info
     adminInitialLiquidity: 0n,
     userLiquidity: 0n,
-    totalVolume: 0n,
+    totalVolume,
     platformFeesCollected: 0n,
     ammFeesCollected: 0n,
     adminLiquidityClaimed: false,
@@ -267,13 +308,13 @@ export async function getTotalMarketCount(): Promise<{
         abi: contractAbi,
         functionName: "getMarketCount",
         args: [],
-      }),
+      }) as Promise<bigint>,
       publicClient.readContract({
         address: V2contractAddress,
         abi: V2contractAbi,
-        functionName: "getMarketCount",
+        functionName: "marketCount",
         args: [],
-      }),
+      }) as Promise<bigint>,
     ]);
 
     return {

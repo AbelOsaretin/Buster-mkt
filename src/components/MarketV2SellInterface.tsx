@@ -113,20 +113,22 @@ export function MarketV2SellInterface({
     query: { enabled: selectedOptionId !== null },
   });
 
-  // Calculate estimated revenue using the new pricing system
+  // Calculate estimated revenue - contract stores probabilities, convert to revenue
   const estimatedRevenue = useMemo(() => {
     if (!optionData || !sellAmount || parseFloat(sellAmount) <= 0) return 0n;
 
-    const tokenPrice = optionData[4] as bigint; // This is now token price (0-100 range)
+    const probability = optionData[4] as bigint; // This is probability (0-1 range scaled by 1e18)
     const quantity = BigInt(
       Math.floor(parseFloat(sellAmount) * Math.pow(10, 18))
     );
 
-    // Calculate revenue: tokenPrice * quantity / 1e18
-    const rawRefund = (tokenPrice * quantity) / BigInt(1e18);
+    // Calculate revenue: probability * quantity * PAYOUT_PER_SHARE / 1e18
+    // PAYOUT_PER_SHARE = 100e18 (100 tokens per share)
+    const probTimesQty = (probability * quantity) / BigInt(1e18);
+    const rawRefund = (probTimesQty * BigInt(100e18)) / BigInt(1e18);
 
     // Subtract platform fee (2%)
-    const fee = (rawRefund * 200n) / 10000n; // 2% fee in basis points
+    const fee = (rawRefund * 200n) / 10000n;
     return rawRefund - fee;
   }, [optionData, sellAmount]);
 

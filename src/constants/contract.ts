@@ -9,8 +9,8 @@ export const publicClient = createPublicClient({
 
 export const contractAddress = "0xd24261cD87Ac11A8961a2d5df7036ad87ca7F02A";
 export const tokenAddress = "0x53Bd7F868764333de01643ca9102ee4297eFA3cb";
-export const V2contractAddress = "0x22Bc3bE4E71BAfbf4743dB6FFb127FB7E9CB30A9";
-export const PolicastViews = "0x6ADFb0b39994b2a31031f126dA8e7A5fdb0D5442";
+export const V2contractAddress = "0x02e59aA3ceFD0097FcEF895536C0476045Bd3fa3";
+export const PolicastViews = "0xb14c353A4307A3eBeF52dbb8F11517cf17b74d0A";
 // V1 Contract ABI for binary markets (legacy)
 export const contractAbi = [
   {
@@ -3507,6 +3507,47 @@ export const PolicastViewsAbi = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "quoteBuy",
+    inputs: [
+      { name: "_marketId", type: "uint256", internalType: "uint256" },
+      { name: "_optionId", type: "uint256", internalType: "uint256" },
+      { name: "_quantity", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [
+      { name: "rawCost", type: "uint256", internalType: "uint256" },
+      { name: "fee", type: "uint256", internalType: "uint256" },
+      { name: "totalCost", type: "uint256", internalType: "uint256" },
+      {
+        name: "avgPricePerShare",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "quoteSell",
+    inputs: [
+      { name: "_marketId", type: "uint256", internalType: "uint256" },
+      { name: "_optionId", type: "uint256", internalType: "uint256" },
+      { name: "_quantity", type: "uint256", internalType: "uint256" },
+    ],
+    outputs: [
+      { name: "rawRefund", type: "uint256", internalType: "uint256" },
+      { name: "fee", type: "uint256", internalType: "uint256" },
+      { name: "netRefund", type: "uint256", internalType: "uint256" },
+      {
+        name: "avgPricePerShare",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  { type: "error", name: "PriceInvariant", inputs: [] },
 ] as const;
 
 export const contract = getContract({

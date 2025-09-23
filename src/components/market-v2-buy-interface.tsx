@@ -46,46 +46,55 @@ type BuyingStep =
 const MAX_BET = 50000000000000000000000000000000;
 const MAX_SHARES = 1000;
 
-// Convert amount to token units (handles custom decimals)
-function toUnits(amount: string, decimals: number): bigint {
-  const [integer = "0", fraction = ""] = amount.split(".");
-  const paddedFraction = fraction.padEnd(decimals, "0").slice(0, decimals);
-  return (
-    BigInt(integer + paddedFraction) *
-    BigInt(10) ** BigInt(decimals - paddedFraction.length)
-  );
+// Convert shares to 1e18 units (shares have 18 decimals regardless of token decimals)
+function sharesToWei(amount: string): bigint {
+  if (!amount) return 0n;
+  const parts = amount.split(".");
+  const integer = parts[0] || "0";
+  const fraction = (parts[1] || "").padEnd(18, "0").slice(0, 18);
+  return BigInt(integer + fraction);
 }
 
-// Helper function to calculate implied probability from price
-function calculateProbability(price: bigint): number {
-  // PolicastViews returns token prices (0-100 range), convert to percentage
-  // If using raw probabilities from getMarketOption, those are (0-1 range scaled by 1e18)
-  const tokenPrice = Number(price) / 1e18;
-  return Math.max(0, Math.min(100, tokenPrice));
+// Helper: probability/price conversions
+function calculateProbabilityFromTokenPrice(tokenPrice: bigint): number {
+  // tokenPrice is tokens/share (1e18), which equals prob * 100
+  const tp = Number(tokenPrice) / 1e18; // 0..100
+  return Math.max(0, Math.min(100, tp)); // percentage
 }
 
-// Helper function to calculate implied odds
-function calculateOdds(price: bigint): number {
-  // Convert probability to odds
-  const probability = Number(price) / 1e18;
-  if (probability <= 0) return 0;
-  return 1 / probability;
+function calculateOddsFromTokenPrice(tokenPrice: bigint): number {
+  // prob = tokenPrice / 100
+  const tp = Number(tokenPrice) / 1e18; // 0..100
+  const prob = tp / 100; // 0..1
+  if (prob <= 0) return 0;
+  return 1 / prob;
 }
 
-// Format price with proper decimals
-function formatPrice(price: bigint, decimals: number = 18): string {
-  // Format the raw value with proper scaling
-  const formatted = Number(price) / Math.pow(10, decimals);
-  if (formatted < 0.01) return formatted.toFixed(4);
-  if (formatted < 1) return formatted.toFixed(3);
-  return formatted.toFixed(2);
-}
-
-// Convert internal probability to token price (for fallback scenarios)
+// Fix TS bigints
 function probabilityToTokenPrice(probability: bigint): bigint {
-  // Convert internal probability (0-1 range scaled by 1e18) to token price (0-100 range)
-  const PAYOUT_PER_SHARE = 100n * BigInt(1e18); // 100 tokens per share
+  // 1 share pays out 100 tokens at resolution (1e18 scaled)
+  const PAYOUT_PER_SHARE = 100n * BigInt(1e18);
   return (probability * PAYOUT_PER_SHARE) / BigInt(1e18);
+}
+
+// Convert a decimal string to token/base units with given decimals
+function toUnits(value: string, decimals: number): bigint {
+  if (!value) return 0n;
+  const [intPart, fracRaw = ""] = value.split(".");
+  const frac = fracRaw.padEnd(decimals, "0").slice(0, decimals);
+  const normalized = `${intPart || "0"}${frac}`.replace(/^0+(?=\d)/, "");
+  return normalized ? BigInt(normalized) : 0n;
+}
+
+// Format bigint token amount to human-readable string
+function formatPrice(amount: bigint, decimals = 18): string {
+  const negative = amount < 0n;
+  const x = negative ? -amount : amount;
+  const s = x.toString().padStart(decimals + 1, "0");
+  const int = s.slice(0, -decimals);
+  const fracRaw = s.slice(-decimals);
+  const frac = fracRaw.replace(/0+$/, "");
+  return `${negative ? "-" : ""}${frac ? `${int}.${frac}` : int}`;
 }
 
 export function MarketV2BuyInterface({
@@ -99,6 +108,14 @@ export function MarketV2BuyInterface({
     hash,
   });
   const { toast } = useToast();
+
+  // Fetch market info (validated flag and type)
+  const { data: marketInfo } = useReadContract({
+    address: V2contractAddress,
+    abi: V2contractAbi,
+    functionName: "getMarketInfo",
+    args: [BigInt(marketId)],
+  });
 
   // Get market odds directly from contract
   const { data: marketOdds } = useReadContract({
@@ -295,30 +312,34 @@ export function MarketV2BuyInterface({
     },
   });
 
-  // Fetch real-time cost estimation - contract stores probabilities, convert to cost
-  const estimatedCost = useMemo(() => {
-    if (!optionData || !amount || parseFloat(amount) <= 0) return 0n;
+  // Add: on-chain quote for accurate LMSR cost
+  const sharesInWei = useMemo(() => sharesToWei(amount), [amount]);
 
-    const probability = optionData[4] as bigint; // This is probability (0-1 range scaled by 1e18)
-    const quantity = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, 18)));
-
-    // Calculate cost: probability * quantity * PAYOUT_PER_SHARE / 1e18
-    // PAYOUT_PER_SHARE = 100e18 (100 tokens per share)
-    const probTimesQty = (probability * quantity) / BigInt(1e18);
-    const rawCost = (probTimesQty * BigInt(100e18)) / BigInt(1e18);
-
-    // Add platform fee (2%)
-    const fee = (rawCost * 200n) / 10000n;
-    return rawCost + fee;
-  }, [optionData, amount]);
-
-  // Fetch market info for validation
-  const { data: marketInfo } = useReadContract({
-    address: V2contractAddress,
-    abi: V2contractAbi,
-    functionName: "getMarketInfo",
-    args: [BigInt(marketId)],
+  const { data: buyQuote } = useReadContract({
+    address: PolicastViews,
+    abi: PolicastViewsAbi,
+    functionName: "quoteBuy",
+    args:
+      selectedOptionId === null
+        ? undefined
+        : [BigInt(marketId), BigInt(selectedOptionId), sharesInWei],
+    query: {
+      enabled: selectedOptionId !== null && sharesInWei > 0n,
+      refetchInterval: 2000,
+    },
   });
+
+  // Replace linear estimatedCost with on-chain LMSR quote
+  const estimatedCost = useMemo(() => {
+    if (!buyQuote) return 0n;
+    const [, , totalCost] = buyQuote as readonly [
+      bigint,
+      bigint,
+      bigint,
+      bigint
+    ];
+    return totalCost;
+  }, [buyQuote]);
 
   // Calculate slippage protection (10% slippage tolerance)
   const calculateMaxPrice = useCallback((currentPrice: bigint): bigint => {
@@ -353,7 +374,7 @@ export function MarketV2BuyInterface({
     )
       return;
     try {
-      const amountInUnits = toUnits(amount, tokenDecimals);
+      const amountInUnits = sharesToWei(amount);
 
       // Check balance using estimated cost instead of share amount
       if (!userBalance) {
@@ -361,27 +382,15 @@ export function MarketV2BuyInterface({
       }
 
       // Use estimated cost for balance check, fallback to approximate calculation if not available
-      const requiredBalance =
-        estimatedCost ||
-        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
-
-      if ((requiredBalance as bigint) > ((userBalance as bigint) || 0n)) {
-        throw new Error(
-          `Insufficient balance. Total cost: ${formatPrice(
-            requiredBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
-            userBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}`
-        );
-      }
-
-      // Calculate max price per share from estimated cost with slippage tolerance
-      const avgPricePerShare = estimatedCost
-        ? (estimatedCost * BigInt(1e18)) / amountInUnits
+      const requiredBalance = estimatedCost; // from on-chain quote
+      const avgPricePerShare = buyQuote
+        ? ((buyQuote as any)[3] as bigint) // avg price per share incl. fee (1e18-scaled)
         : optionData?.[4] || 0n;
       const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
+      // 2% buffer for total bound to reduce revert from minor moves
+      const maxTotalCost = requiredBalance
+        ? (requiredBalance * 102n) / 100n
+        : requiredBalance;
 
       console.log("=== V2 DIRECT PURCHASE DEBUG ===");
       console.log("Market ID:", marketId);
@@ -410,7 +419,7 @@ export function MarketV2BuyInterface({
           BigInt(selectedOptionId),
           amountInUnits,
           maxPricePerShare,
-          requiredBalance, // _maxTotalCost
+          maxTotalCost,
         ],
       });
     } catch (err: unknown) {
@@ -499,7 +508,7 @@ export function MarketV2BuyInterface({
 
     try {
       setIsProcessing(true);
-      const amountInUnits = toUnits(amount, tokenDecimals);
+      const amountInUnits = sharesToWei(amount);
 
       // Check balance using estimated cost instead of share amount
       if (!userBalance) {
@@ -507,32 +516,21 @@ export function MarketV2BuyInterface({
       }
 
       // Use estimated cost for balance check, fallback to approximate calculation if not available
-      const requiredBalance =
-        estimatedCost ||
-        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
-
-      if ((requiredBalance as bigint) > ((userBalance as bigint) || 0n)) {
-        throw new Error(
-          `Insufficient balance. Total cost: ${formatPrice(
-            requiredBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
-            userBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}`
-        );
-      }
-
-      // Use estimated cost for approval logic, not share amount
-      const requiredApproval =
-        estimatedCost ||
-        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
-      const needsApproval =
-        (requiredApproval as bigint) > ((userAllowance as bigint) || 0n);
+      const requiredBalance = estimatedCost; // from on-chain quote
+      const avgPricePerShare = buyQuote
+        ? ((buyQuote as any)[3] as bigint) // avg price per share incl. fee (1e18-scaled)
+        : optionData?.[4] || 0n;
+      const maxPricePerShare = calculateMaxPrice(avgPricePerShare);
+      // 2% buffer for total bound to reduce revert from minor moves
+      const maxTotalCost = requiredBalance
+        ? (requiredBalance * 102n) / 100n
+        : requiredBalance;
 
       console.log("=== V2 SEQUENTIAL PURCHASE ===");
       console.log("Amount in units:", amountInUnits.toString());
-      console.log("Required approval:", requiredApproval.toString());
+      console.log("Required approval:", requiredBalance.toString());
+      const requiredApproval = requiredBalance;
+      const needsApproval = requiredApproval > (userAllowance || 0n);
       console.log("Needs approval:", needsApproval);
       console.log("Current allowance:", userAllowance?.toString());
 
@@ -568,7 +566,7 @@ export function MarketV2BuyInterface({
             BigInt(selectedOptionId),
             amountInUnits,
             maxPricePerShare,
-            requiredApproval, // _maxTotalCost
+            maxTotalCost,
           ],
         });
       }
@@ -641,7 +639,7 @@ export function MarketV2BuyInterface({
       return;
     try {
       setIsProcessing(true);
-      const amountInUnits = toUnits(amount, tokenDecimals);
+      const amountInUnits = sharesToWei(amount);
 
       // Check balance using estimated cost instead of share amount
       if (!userBalance) {
@@ -649,22 +647,7 @@ export function MarketV2BuyInterface({
       }
 
       // Use estimated cost for balance check, fallback to approximate calculation if not available
-      const requiredBalance =
-        estimatedCost ||
-        (amountInUnits * (optionData?.[4] || 0n)) / BigInt(1e18);
-
-      if (requiredBalance > userBalance) {
-        throw new Error(
-          `Insufficient balance. Total cost: ${formatPrice(
-            requiredBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}, You have: ${formatPrice(
-            userBalance,
-            tokenDecimals
-          )} ${tokenSymbol || "tokens"}`
-        );
-      }
-
+      const requiredBalance = estimatedCost; // from on-chain quote
       const currentPrice = optionData?.[4] || 0n;
       // Get token price directly from PolicastViews (if available)
       const tokenPriceFromContract =
@@ -1320,10 +1303,12 @@ export function MarketV2BuyInterface({
               {market.options.map((option, index) => {
                 // Use token price from PolicastViews if available, fallback to option.currentPrice
                 const tokenPrice = tokenPrices?.[index] || option.currentPrice;
-                const currentPrice = formatPrice(tokenPrice);
-                const contractOdds = odds[index] || 0n;
-                const probability = calculateProbability(tokenPrice);
-                const oddsFormatted = Number(contractOdds) / 1e18;
+                const probability =
+                  calculateProbabilityFromTokenPrice(tokenPrice);
+                const oddsFormatted =
+                  odds.length > 0
+                    ? Number(odds[index] || 0n) / 1e18
+                    : calculateOddsFromTokenPrice(tokenPrice);
                 const isSelected = selectedOptionId === index;
 
                 return (
@@ -1354,8 +1339,10 @@ export function MarketV2BuyInterface({
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {probability.toFixed(1)}% •{" "}
                           {odds.length > 0
-                            ? (Number(contractOdds) / 1e18).toFixed(2)
-                            : calculateOdds(tokenPrice).toFixed(2)}
+                            ? (Number(odds[index] || 0n) / 1e18).toFixed(2)
+                            : calculateOddsFromTokenPrice(tokenPrice).toFixed(
+                                2
+                              )}
                           x odds
                         </p>
                       </div>
@@ -1643,3 +1630,4 @@ export function MarketV2BuyInterface({
     </div>
   );
 }
+//new

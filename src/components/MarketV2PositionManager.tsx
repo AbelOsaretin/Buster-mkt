@@ -14,6 +14,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { MarketV2SellInterface } from "./MarketV2SellInterface";
+import { MarketV2BuyInterface } from "./market-v2-buy-interface";
 import { MarketV2, MarketOption } from "@/types/types";
 import {
   TrendingUp,
@@ -44,7 +45,7 @@ interface UserPosition {
 
 // Format price with proper decimals//
 
-function formatPrice(price: bigint, decimals: number = 16): string {
+function formatPrice(price: bigint, decimals: number = 18): string {
   const formatted = Number(price) / Math.pow(10, decimals);
   if (formatted === 0) return "0.0000";
   if (formatted < 0.0001) return formatted.toFixed(6);
@@ -74,7 +75,9 @@ export function MarketV2PositionManager({
   onPositionUpdate,
 }: MarketV2PositionManagerProps) {
   const { address: accountAddress } = useAccount();
-  const [activeTab, setActiveTab] = useState<"overview" | "sell">("overview");
+  const [activeTab, setActiveTab] = useState<"buy" | "overview" | "sell">(
+    "buy"
+  );
   const [showZeroPositions, setShowZeroPositions] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -292,6 +295,11 @@ export function MarketV2PositionManager({
   );
   const hasPositions = positions.some((pos) => pos.shares > 0n);
 
+  // Convert shares array to object for interfaces
+  const userSharesObject = userSharesQueries.map((query) =>
+    query?.data ? (query.data as bigint) : 0n
+  );
+
   // Handle refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -371,7 +379,10 @@ export function MarketV2PositionManager({
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as any)}
           >
-            <TabsList className="grid w-full grid-cols-2 h-9 md:h-10">
+            <TabsList className="grid w-full grid-cols-3 h-9 md:h-10">
+              <TabsTrigger value="buy" className="text-xs md:text-sm">
+                Buy Shares
+              </TabsTrigger>
               <TabsTrigger value="overview" className="text-xs md:text-sm">
                 Overview
               </TabsTrigger>
@@ -379,6 +390,10 @@ export function MarketV2PositionManager({
                 Sell Shares
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="buy" className="mt-3 md:mt-4">
+              <MarketV2BuyInterface marketId={marketId} market={market} />
+            </TabsContent>
 
             <TabsContent
               value="overview"
@@ -511,6 +526,7 @@ export function MarketV2PositionManager({
               <MarketV2SellInterface
                 marketId={marketId}
                 market={market}
+                userShares={userSharesObject}
                 onSellComplete={handleRefresh}
               />
             </TabsContent>

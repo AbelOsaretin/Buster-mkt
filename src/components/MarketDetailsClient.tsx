@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
 import { sdk } from "@farcaster/miniapp-sdk";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/toaster";
 import { Clock, Award, Users } from "lucide-react";
 import { MarketBuyInterface } from "@/components/market-buy-interface";
-import { MarketV2TradingInterface } from "@/components/MarketV2TradingInterface";
+import { MarketV2PositionManager } from "@/components/MarketV2PositionManager";
 import { V3FinancialManager } from "@/components/V3FinancialManager";
 import { MarketResolved } from "@/components/market-resolved";
 import { MarketPending } from "@/components/market-pending";
@@ -25,7 +24,7 @@ import { MarketChart } from "@/components/market-chart";
 import { CommentSystem } from "@/components/CommentSystem";
 import { MarketV2, MarketOption, MarketCategory } from "@/types/types";
 import { useV3UserRoles } from "@/hooks/useV3UserRoles";
-import { V2contractAddress, V2contractAbi } from "@/constants/contract";
+import { FreeTokenClaimButton } from "@/components/FreeTokenClaimButton";
 
 interface Market {
   question: string;
@@ -50,6 +49,8 @@ interface Market {
   version?: "v1" | "v2";
   // Event-based market support
   earlyResolutionAllowed?: boolean;
+  // Market type for free markets
+  marketType?: number;
 }
 
 interface MarketDetailsClientProps {
@@ -112,7 +113,6 @@ export function MarketDetailsClient({
   marketId,
   market,
 }: MarketDetailsClientProps) {
-  const { address: accountAddress, isConnected } = useAccount();
   const { isCreator, isLP, isFeeCollector, checkCreatorStatus, checkLPStatus } =
     useV3UserRoles();
   const [userRoles, setUserRoles] = useState({
@@ -329,6 +329,15 @@ export function MarketDetailsClient({
           </div>
         </div>
 
+        {/* Free Token Claim Button - Show for V2 free markets */}
+        {market.version === "v2" && market.marketType === 1 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 md:p-6 mb-4 md:mb-6">
+            <div className="flex items-center justify-center">
+              <FreeTokenClaimButton marketId={Number(marketId)} />
+            </div>
+          </div>
+        )}
+
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 md:p-6">
           <div className="mb-4 md:mb-6">
             {isEnded ? (
@@ -352,7 +361,7 @@ export function MarketDetailsClient({
                 <MarketPending />
               )
             ) : market.version === "v2" ? (
-              <MarketV2TradingInterface
+              <MarketV2PositionManager
                 marketId={Number(marketId)}
                 market={
                   {
@@ -393,10 +402,6 @@ export function MarketDetailsClient({
                       market.earlyResolutionAllowed || false,
                   } satisfies MarketV2
                 }
-                onSellComplete={() => {
-                  // Could refresh user shares or show success message
-                  console.log("Sell completed");
-                }}
               />
             ) : (
               <MarketBuyInterface

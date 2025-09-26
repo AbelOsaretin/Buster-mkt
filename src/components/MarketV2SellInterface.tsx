@@ -18,7 +18,6 @@ import {
   V2contractAbi,
   tokenAddress,
   tokenAbi,
-  publicClient,
   PolicastViews,
   PolicastViewsAbi,
 } from "@/constants/contract";
@@ -31,6 +30,7 @@ import { MarketV2 } from "@/types/types";
 interface MarketV2SellInterfaceProps {
   marketId: number;
   market: MarketV2;
+  userShares: { [optionId: number]: bigint };
   onSellComplete?: () => void;
 }
 
@@ -51,13 +51,13 @@ function calculateProbability(tokenPrice: bigint): number {
 // Helper function to calculate implied odds
 function calculateOdds(tokenPrice: bigint): number {
   // Convert token price to probability and then to odds
-  const probability = Number(tokenPrice) / (100 * 1e16); // Convert back to 0-1 range
+  const probability = Number(tokenPrice) / (100 * 1e18); // Convert back to 0-1 range
   if (probability <= 0) return 0;
   return 1 / probability;
 }
 
 // Format price with proper decimals
-function formatPrice(price: bigint, decimals: number = 16): string {
+function formatPrice(price: bigint, decimals: number = 18): string {
   const formatted = Number(price) / Math.pow(10, decimals);
   if (formatted < 0.01) return formatted.toFixed(4);
   if (formatted < 1) return formatted.toFixed(3);
@@ -80,6 +80,7 @@ function probabilityToTokenPrice(probability: bigint): bigint {
 export function MarketV2SellInterface({
   marketId,
   market,
+  userShares,
   onSellComplete,
 }: MarketV2SellInterfaceProps) {
   const { address: accountAddress, isConnected, connector } = useAccount();
@@ -109,9 +110,6 @@ export function MarketV2SellInterface({
   const [sellAmount, setSellAmount] = useState<string>("");
   const [sellingStep, setSellingStep] = useState<SellingStep>("initial");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [userShares, setUserShares] = useState<{ [optionId: number]: bigint }>(
-    {}
-  );
   const [error, setError] = useState<string | null>(null);
   const [lastProcessedHash, setLastProcessedHash] = useState<string | null>(
     null
@@ -348,35 +346,6 @@ export function MarketV2SellInterface({
     }
   }, [sellingStep, selectedOptionId, error]);
 
-  // Fetch user shares for all options
-  useEffect(() => {
-    const fetchUserShares = async () => {
-      if (!accountAddress || !market.options) return;
-
-      try {
-        const sharesPromises = market.options.map((_, optionId) =>
-          publicClient.readContract({
-            address: V2contractAddress,
-            abi: V2contractAbi,
-            functionName: "getMarketOptionUserShares",
-            args: [BigInt(marketId), BigInt(optionId), accountAddress],
-          })
-        );
-
-        const sharesResults = await Promise.all(sharesPromises);
-        const sharesObj: { [optionId: number]: bigint } = {};
-        sharesResults.forEach((shares, optionId) => {
-          sharesObj[optionId] = shares as bigint;
-        });
-        setUserShares(sharesObj);
-      } catch (error) {
-        console.error("Failed to fetch user shares:", error);
-      }
-    };
-
-    fetchUserShares();
-  }, [accountAddress, marketId, market.options]);
-
   const currentPrice =
     tokenPrices && selectedOptionId !== null
       ? (tokenPrices as readonly bigint[])[selectedOptionId]
@@ -465,8 +434,10 @@ export function MarketV2SellInterface({
                           Current Price
                         </div>
                         <div className="font-medium text-sm md:text-base">
-                          {formatPrice(option.currentPrice)}{" "}
-                          {tokenSymbol || "TOKENS"}
+                          {(
+                            Number(formatPrice(option.currentPrice)) * 100
+                          ).toFixed(1)}
+                          %
                         </div>
                       </div>
                     </div>
@@ -487,8 +458,8 @@ export function MarketV2SellInterface({
                 </div>
                 <div>Available: {formatShares(userSharesForOption)} shares</div>
                 <div>
-                  Current Price: {formatPrice(currentPrice)}{" "}
-                  {tokenSymbol || "TOKENS"}
+                  Current Price:{" "}
+                  {(Number(formatPrice(currentPrice)) * 100).toFixed(1)}%
                 </div>
               </div>
             </div>
@@ -595,7 +566,7 @@ export function MarketV2SellInterface({
                 <div className="flex justify-between">
                   <span>Current Price:</span>
                   <span className="font-medium">
-                    {formatPrice(currentPrice)} {tokenSymbol}
+                    {(Number(formatPrice(currentPrice)) * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">

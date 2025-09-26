@@ -324,7 +324,7 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
   // Share handling
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://buster-mkt.vercel.app";
-  const marketPageUrl = `${appUrl}/market/${index}/details`;
+  const marketPageUrl = `${appUrl}/market/v2/${index}/details`;
 
   const handleShare = async () => {
     try {
@@ -414,7 +414,7 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
                 userShares={userShares || []}
                 options={options}
               />
-              <Link href={`/market/${index}/details`}>
+              <Link href={`/market/v2/${index}/details`}>
                 <Button variant="outline" size="sm" className="text-xs">
                   Manage Position
                 </Button>
@@ -449,7 +449,7 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
           </Button>
 
           {/* Details link */}
-          <Link href={`/market/${index}/details`} passHref>
+          <Link href={`/market/v2/${index}/details`} passHref>
             <Button
               variant="ghost"
               size="sm"

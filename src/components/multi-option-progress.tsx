@@ -12,9 +12,9 @@ interface MultiOptionProgressProps {
   className?: string;
 }
 
-// Helper function to format price (assuming 16 decimals)
+// Helper function to format price (assuming 18 decimals)
 function formatPrice(price: bigint): string {
-  const formatted = Number(price) / 1e16;
+  const formatted = Number(price) / 1e18;
   if (formatted < 0.01) return formatted.toFixed(4);
   if (formatted < 1) return formatted.toFixed(3);
   return formatted.toFixed(2);
@@ -22,7 +22,7 @@ function formatPrice(price: bigint): string {
 
 // Helper function to format odds (odds come as multipliers from contract)
 function formatOdds(odds: bigint): string {
-  const oddsNumber = Number(odds) / 1e16;
+  const oddsNumber = Number(odds) / 1e18;
   return oddsNumber.toFixed(2);
 }
 

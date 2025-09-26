@@ -51,13 +51,13 @@ function calculateProbability(tokenPrice: bigint): number {
 // Helper function to calculate implied odds
 function calculateOdds(tokenPrice: bigint): number {
   // Convert token price to probability and then to odds
-  const probability = Number(tokenPrice) / (100 * 1e18); // Convert back to 0-1 range
+  const probability = Number(tokenPrice) / (100 * 1e16); // Convert back to 0-1 range
   if (probability <= 0) return 0;
   return 1 / probability;
 }
 
 // Format price with proper decimals
-function formatPrice(price: bigint, decimals: number = 18): string {
+function formatPrice(price: bigint, decimals: number = 16): string {
   const formatted = Number(price) / Math.pow(10, decimals);
   if (formatted < 0.01) return formatted.toFixed(4);
   if (formatted < 1) return formatted.toFixed(3);

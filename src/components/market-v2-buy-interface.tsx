@@ -64,7 +64,7 @@ function calculateProbabilityFromTokenPrice(tokenPrice: bigint): number {
 
 function calculateOddsFromTokenPrice(tokenPrice: bigint): number {
   // prob = tokenPrice / 100
-  const tp = Number(tokenPrice) / 1e18; // 0..100
+  const tp = Number(tokenPrice) / 1e16; // 0..100
   const prob = tp / 100; // 0..1
   if (prob <= 0) return 0;
   return 1 / prob;
@@ -87,7 +87,7 @@ function toUnits(value: string, decimals: number): bigint {
 }
 
 // Format bigint token amount to human-readable string
-function formatPrice(amount: bigint, decimals = 18): string {
+function formatPrice(amount: bigint, decimals = 16): string {
   const negative = amount < 0n;
   const x = negative ? -amount : amount;
   const s = x.toString().padStart(decimals + 1, "0");
@@ -1320,7 +1320,7 @@ export function MarketV2BuyInterface({
                   calculateProbabilityFromTokenPrice(tokenPrice);
                 const oddsFormatted =
                   odds.length > 0
-                    ? Number(odds[index] || 0n) / 1e18
+                    ? Number(odds[index] || 0n) / 1e16
                     : calculateOddsFromTokenPrice(tokenPrice);
                 const isSelected = selectedOptionId === index;
 
@@ -1352,7 +1352,7 @@ export function MarketV2BuyInterface({
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {probability.toFixed(1)}% •{" "}
                           {odds.length > 0
-                            ? (Number(odds[index] || 0n) / 1e18).toFixed(2)
+                            ? (Number(odds[index] || 0n) / 1e16).toFixed(2)
                             : calculateOddsFromTokenPrice(tokenPrice).toFixed(
                                 2
                               )}

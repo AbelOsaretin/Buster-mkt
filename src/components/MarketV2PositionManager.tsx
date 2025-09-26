@@ -44,7 +44,7 @@ interface UserPosition {
 
 // Format price with proper decimals//
 
-function formatPrice(price: bigint, decimals: number = 18): string {
+function formatPrice(price: bigint, decimals: number = 16): string {
   const formatted = Number(price) / Math.pow(10, decimals);
   if (formatted === 0) return "0.0000";
   if (formatted < 0.0001) return formatted.toFixed(6);

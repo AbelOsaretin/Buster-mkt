@@ -34,6 +34,14 @@ export function FreeMarketClaimStatus({
   className = "",
   marketType,
 }: FreeMarketClaimStatusProps) {
+  // Debug helper (gated by env var to avoid noisy prod logs)
+  const debug = (...args: any[]) => {
+    if (process.env.NEXT_PUBLIC_DEBUG_FREE_MARKET === "true") {
+      // eslint-disable-next-line no-console
+      console.debug("[FreeMarketClaimStatus]", ...args);
+    }
+  };
+
   const { address } = useAccount();
   const { toast } = useToast();
   const [hasShownSuccessToast, setHasShownSuccessToast] = useState(false);
@@ -82,6 +90,14 @@ export function FreeMarketClaimStatus({
   // Use contract data if marketType is provided, otherwise use subgraph
   const isFreeMarket =
     marketType !== undefined ? marketType === 1 : market?.marketType === "FREE";
+
+  debug("render start", {
+    marketId,
+    addressPresent: !!address,
+    providedMarketType: marketType,
+    subgraphMarketType: market?.marketType,
+    isFreeMarket,
+  });
 
   // Parse free market info from contract: [maxFreeParticipants, tokensPerParticipant, currentFreeParticipants, totalPrizePool, remainingPrizePool, isActive]
   const contractFreeInfo = freeMarketInfoContract as
@@ -133,27 +149,44 @@ export function FreeMarketClaimStatus({
   }, [isClaimConfirmed, hasShownSuccessToast, tokensPerParticipant, toast]);
 
   // Early returns after all hooks
-  if (!address) {
-    return null;
-  }
-
-  // Check if market is free entry
+  // If not a free market at all, exit silently (badge on card already communicates Free Entry)
   if (!isFreeMarket) {
+    debug("early-return: market not free", {
+      providedMarketType: marketType,
+      subgraphMarketType: market?.marketType,
+    });
     return null;
   }
 
-  // If using contract data, check if we have the info
+  // Loading placeholder while contract free info is fetching (explicit marketType path)
   if (marketType === 1 && !contractFreeInfo) {
-    return null;
+    return (
+      <div
+        className={`flex items-center gap-2 text-xs text-gray-500 ${className}`}
+      >
+        <div className="h-5 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+        <div className="h-6 w-14 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      </div>
+    );
   }
 
-  // If using subgraph data, check if we have the market and config
+  // Loading placeholder for subgraph path
   if (
     marketType === undefined &&
-    (!market || isLoadingMarket || !market.freeMarketConfig)
+    (isLoadingMarket || !market || !market.freeMarketConfig)
   ) {
-    return null;
+    return (
+      <div
+        className={`flex items-center gap-2 text-xs text-gray-500 ${className}`}
+      >
+        <div className="h-5 w-24 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+        <div className="h-6 w-14 rounded bg-gray-200 dark:bg-gray-700 animate-pulse" />
+      </div>
+    );
   }
+
+  // We intentionally still show UI for disconnected wallets (prompt)
+  const walletConnected = !!address;
 
   const hasUserClaimed = claimStatus ? claimStatus[0] : false;
   const tokensReceived = claimStatus ? claimStatus[1] : 0n;
@@ -200,6 +233,11 @@ export function FreeMarketClaimStatus({
           <Gift className="h-3 w-3 mr-1" />
           Claimed {formatPrice(tokensReceived, 18)} tokens
         </Badge>
+      ) : !walletConnected ? (
+        <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+          <Gift className="h-3 w-3 mr-1" />
+          Connect to claim free tokens
+        </Badge>
       ) : slotsRemaining > 0n ? (
         <div className="flex items-center gap-2">
           <Badge className="bg-blue-100 text-blue-800 border-blue-200">
@@ -208,7 +246,7 @@ export function FreeMarketClaimStatus({
           </Badge>
           <Button
             onClick={handleClaimFreeTokens}
-            disabled={isClaimPending || isClaimConfirming || !address}
+            disabled={isClaimPending || isClaimConfirming || !walletConnected}
             size="sm"
             className="h-6 px-2 text-xs bg-blue-600 hover:bg-blue-700"
           >
@@ -233,7 +271,7 @@ export function FreeMarketClaimStatus({
       )}
 
       {/* Detailed Info */}
-      {!hasUserClaimed && (
+      {!hasUserClaimed && walletConnected && (
         <div className="text-xs text-gray-600">
           <div className="flex items-center justify-between">
             <span>Slots remaining:</span>

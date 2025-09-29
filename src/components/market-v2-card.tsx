@@ -256,9 +256,11 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
   useEffect(() => {
     let mounted = true;
     const fetchOptions = async () => {
-      if (!marketInfo) return;
+      // Use market.optionCount from prop for immediate loading; fallback to marketInfo[4]
+      const optionCount =
+        Number(market.optionCount) || (marketInfo ? Number(marketInfo[4]) : 0);
+      if (optionCount <= 0) return; // Early return if no options
 
-      const optionCount = Number(marketInfo[4]); // optionCount from getMarketInfo
       const optionsData: MarketOption[] = [];
       let totalVol = 0n;
 
@@ -330,7 +332,7 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
       mounted = false;
       window.removeEventListener("market-updated", handler);
     };
-  }, [index, marketInfo]);
+  }, [index, market, marketInfo]); // Added market to dependencies for reactivity
 
   // Calculate probabilities from prices (pass to MultiOptionProgress)
   const probabilities = displayOptions.map((option) =>

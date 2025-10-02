@@ -789,7 +789,7 @@ export function UserStats() {
                 {stats.v2Portfolio && (
                   <div className="mt-4 p-3 bg-green-25 border border-green-200 rounded-lg">
                     <h4 className="text-sm font-semibold text-green-800 mb-2">
-                      V2 Portfolio Details
+                      Portfolio Details
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs mb-2">
                       <div>

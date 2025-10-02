@@ -617,7 +617,7 @@ export function VoteHistory() {
                       maximumFractionDigits: 2,
                     })}{" "}
                     <span className="text-xs font-medium text-gray-600">
-                      {tokenSymbol}
+                      shares
                     </span>
                   </div>
                   <div className="text-xs text-gray-500">

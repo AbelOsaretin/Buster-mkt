@@ -246,34 +246,88 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
     }
   }, [derivedMarketType, index]);
 
-  // Fetch user shares for this market
-  const { data: userShares } = (useReadContract as any)({
+  // Fetch user shares for this market using getMarketOptionUserShares for each option
+  // This matches the approach used in MarketV2PositionManager
+  const userShares0Query = useReadContract({
     address: V2contractAddress,
     abi: V2contractAbi,
-    functionName: "getUserShares",
-    args: [BigInt(index), address as `0x${string}`],
-    query: { enabled: !!address },
+    functionName: "getMarketOptionUserShares",
+    args: [BigInt(index), 0n, address as `0x${string}`],
+    query: {
+      enabled: !!address && (market.options?.length ?? 0) > 0,
+      refetchInterval: 10000,
+    },
   });
+
+  const userShares1Query = useReadContract({
+    address: V2contractAddress,
+    abi: V2contractAbi,
+    functionName: "getMarketOptionUserShares",
+    args: [BigInt(index), 1n, address as `0x${string}`],
+    query: {
+      enabled: !!address && (market.options?.length ?? 0) > 1,
+      refetchInterval: 10000,
+    },
+  });
+
+  const userShares2Query = useReadContract({
+    address: V2contractAddress,
+    abi: V2contractAbi,
+    functionName: "getMarketOptionUserShares",
+    args: [BigInt(index), 2n, address as `0x${string}`],
+    query: {
+      enabled: !!address && (market.options?.length ?? 0) > 2,
+      refetchInterval: 10000,
+    },
+  });
+
+  const userShares3Query = useReadContract({
+    address: V2contractAddress,
+    abi: V2contractAbi,
+    functionName: "getMarketOptionUserShares",
+    args: [BigInt(index), 3n, address as `0x${string}`],
+    query: {
+      enabled: !!address && (market.options?.length ?? 0) > 3,
+      refetchInterval: 10000,
+    },
+  });
+
+  const userShares4Query = useReadContract({
+    address: V2contractAddress,
+    abi: V2contractAbi,
+    functionName: "getMarketOptionUserShares",
+    args: [BigInt(index), 4n, address as `0x${string}`],
+    query: {
+      enabled: !!address && (market.options?.length ?? 0) > 4,
+      refetchInterval: 10000,
+    },
+  });
+
+  // Combine individual queries into an array
+  const userSharesQueries = [
+    userShares0Query,
+    userShares1Query,
+    userShares2Query,
+    userShares3Query,
+    userShares4Query,
+  ];
+
+  // Create userShares array from individual queries (matches PositionManager approach)
+  const userShares = userSharesQueries.map((query) =>
+    query?.data ? (query.data as bigint) : 0n
+  );
 
   // Debug user shares
   useEffect(() => {
     console.log(
-      `[MarketV2Card ${index}] getUserShares data:`,
-      userShares,
-      `| type: ${typeof userShares}`,
-      `| isArray: ${Array.isArray(userShares)}`,
+      `[MarketV2Card ${index}] User shares array:`,
+      userShares.map((s, idx) => ({
+        optionId: idx,
+        shares: s.toString(),
+        hasShares: s > 0n,
+      })),
       `| address: ${address}`
     );
-    if (userShares && Array.isArray(userShares)) {
-      console.log(
-        `[MarketV2Card ${index}] User shares array:`,
-        (userShares as readonly bigint[]).map((s, idx) => ({
-          optionId: idx,
-          shares: s.toString(),
-          hasShares: s > 0n,
-        }))
-      );
-    }
   }, [userShares, index, address]);
 
   // Fetch options data: static from API (with cache-busting), real-time price from contract
@@ -673,11 +727,7 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
               <MarketV2SellInterface
                 marketId={index}
                 market={market}
-                userShares={
-                  Array.isArray(userShares)
-                    ? userShares
-                    : market.options.map(() => 0n)
-                }
+                userShares={userShares}
                 onSellComplete={() => {
                   // Trigger event to refresh market data
                   window.dispatchEvent(
@@ -685,6 +735,8 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
                       detail: { marketId: index },
                     })
                   );
+                  // Refetch user shares
+                  userSharesQueries.forEach((query) => query.refetch?.());
                 }}
               />
             )}

@@ -491,8 +491,8 @@ export function MarketV2SellInterface({
                 </div>
                 <div>Available: {formatShares(userSharesForOption)} shares</div>
                 <div>
-                  Current Price:{" "}
-                  {(Number(formatPrice(currentPrice)) * 100).toFixed(1)}%
+                  Current Price: {Number(formatPrice(currentPrice)).toFixed(1)}{" "}
+                  Buster
                 </div>
               </div>
             </div>

@@ -255,6 +255,21 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
     query: { enabled: !!address },
   });
 
+  // Debug user shares
+  useEffect(() => {
+    if (userShares) {
+      console.log(
+        `[MarketV2Card ${index}] getUserShares returned:`,
+        userShares
+      );
+      console.log(
+        `[MarketV2Card ${index}] userShares type:`,
+        typeof userShares,
+        Array.isArray(userShares)
+      );
+    }
+  }, [userShares, index]);
+
   // Fetch options data: static from API (with cache-busting), real-time price from contract
   useEffect(() => {
     let mounted = true;
@@ -652,11 +667,16 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
               <MarketV2SellInterface
                 marketId={index}
                 market={market}
-                userShares={Object.fromEntries(
-                  ((userShares as readonly bigint[]) || []).map(
-                    (shares, idx) => [idx, shares]
-                  )
-                )}
+                userShares={
+                  userShares && Array.isArray(userShares)
+                    ? Object.fromEntries(
+                        (userShares as readonly bigint[]).map((shares, idx) => [
+                          idx,
+                          shares,
+                        ])
+                      )
+                    : {}
+                }
                 onSellComplete={() => {
                   // Trigger event to refresh market data
                   window.dispatchEvent(

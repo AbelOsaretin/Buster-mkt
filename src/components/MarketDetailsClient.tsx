@@ -250,30 +250,6 @@ export function MarketDetailsClient({
   const endTimeMs = Number(market.endTime) * 1000;
   const isEnded = now > endTimeMs;
 
-  // let statusBadge;
-  // if (market.resolved) {
-  //   statusBadge = (
-  //     <div className="inline-flex items-center px-3 py-1 rounded-full text-sm text-sm text-gray-600 bg-green-100 text-green-800">
-  //       <Award className="w-4 h-4 mr-1" />
-  //       Resolved
-  //     </div>
-  //   );
-  // } else if (isEnded) {
-  //   statusBadge = (
-  //     <div className="inline-flex items-center px-3 py-1 rounded-full text-sm text-sm text-gray-600 bg-yellow-100 text-yellow-800">
-  //       <AlertTriangle className="w-4 h-4 mr-1" />
-  //       Unresolved
-  //     </div>
-  //   );
-  // } else {
-  //   statusBadge = (
-  //     <div className="inline-flex items-center px-3 py-1 rounded-full text-sm text-sm text-gray-600 bg-blue-100 text-blue-800">
-  //       <Clock className="w-4 h-4 mr-1" />
-  //       Active
-  //     </div>
-  //   );
-  // }
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />

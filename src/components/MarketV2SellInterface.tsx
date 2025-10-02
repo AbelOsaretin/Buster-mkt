@@ -559,7 +559,7 @@ export function MarketV2SellInterface({
                   setSellAmount("");
                 }}
                 variant="outline"
-                className="flex-1 text-xs md:text-sm h-8 md:h-10"
+                className="flex-1 text-xs h-8"
               >
                 Back
               </Button>
@@ -570,7 +570,7 @@ export function MarketV2SellInterface({
                   parseFloat(sellAmount) <= 0 ||
                   parseFloat(sellAmount) > maxSellAmount
                 }
-                className="flex-1 bg-red-600 hover:bg-red-700 text-xs md:text-sm h-8 md:h-10"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-xs h-8"
               >
                 Review Sale
               </Button>
@@ -627,14 +627,14 @@ export function MarketV2SellInterface({
               <Button
                 onClick={() => setSellingStep("amount")}
                 variant="outline"
-                className="flex-1 text-xs md:text-sm h-8 md:h-10"
+                className="flex-1 text-xs h-8"
               >
                 Back
               </Button>
               <Button
                 onClick={handleSell}
                 disabled={isProcessing}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-xs md:text-sm h-8 md:h-10"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-xs h-8"
               >
                 {isProcessing ? (
                   <>

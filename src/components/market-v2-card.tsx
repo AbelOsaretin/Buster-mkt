@@ -309,8 +309,8 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
             let realTimePrice = 0n;
             try {
               const priceData = await (publicClient.readContract as any)({
-                address: V2contractAddress,
-                abi: V2contractAbi,
+                address: PolicastViews,
+                abi: PolicastViewsAbi,
                 functionName: "calculateCurrentPrice",
                 args: [BigInt(index), BigInt(i)],
               });

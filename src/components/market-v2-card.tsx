@@ -257,18 +257,24 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
 
   // Debug user shares
   useEffect(() => {
-    if (userShares) {
+    console.log(
+      `[MarketV2Card ${index}] getUserShares data:`,
+      userShares,
+      `| type: ${typeof userShares}`,
+      `| isArray: ${Array.isArray(userShares)}`,
+      `| address: ${address}`
+    );
+    if (userShares && Array.isArray(userShares)) {
       console.log(
-        `[MarketV2Card ${index}] getUserShares returned:`,
-        userShares
-      );
-      console.log(
-        `[MarketV2Card ${index}] userShares type:`,
-        typeof userShares,
-        Array.isArray(userShares)
+        `[MarketV2Card ${index}] User shares array:`,
+        (userShares as readonly bigint[]).map((s, idx) => ({
+          optionId: idx,
+          shares: s.toString(),
+          hasShares: s > 0n,
+        }))
       );
     }
-  }, [userShares, index]);
+  }, [userShares, index, address]);
 
   // Fetch options data: static from API (with cache-busting), real-time price from contract
   useEffect(() => {
@@ -668,14 +674,9 @@ export function MarketV2Card({ index, market }: MarketV2CardProps) {
                 marketId={index}
                 market={market}
                 userShares={
-                  userShares && Array.isArray(userShares)
-                    ? Object.fromEntries(
-                        (userShares as readonly bigint[]).map((shares, idx) => [
-                          idx,
-                          shares,
-                        ])
-                      )
-                    : {}
+                  Array.isArray(userShares)
+                    ? userShares
+                    : market.options.map(() => 0n)
                 }
                 onSellComplete={() => {
                   // Trigger event to refresh market data

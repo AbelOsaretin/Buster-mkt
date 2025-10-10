@@ -115,7 +115,7 @@ export async function generateMetadata(
         title: "View Market Details",
         action: {
           type: "launch_miniapp" as const,
-          name: market.question.substring(0, 30),
+          name: "Policast",
           url: marketUrl,
           iconUrl: "https://buster-mkt.vercel.app/icon.png",
           splashImageUrl: "https://buster-mkt.vercel.app/icon.jpg",

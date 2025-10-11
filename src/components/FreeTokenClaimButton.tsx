@@ -609,7 +609,7 @@ export function FreeTokenClaimButton({
       {/* Outcome Selector */}
       <div className="space-y-1">
         <span className="text-xs font-semibold text-green-700 dark:text-green-300">
-          Choose outcome
+          Choose Option
         </span>
         <Select
           value={selectedOptionId ?? undefined}
@@ -667,7 +667,7 @@ export function FreeTokenClaimButton({
         ) : (
           <>
             <Gift className="mr-2 h-4 w-4" />
-            Claim {formatPrice(tokensPerParticipant, 18)} Free shares
+            Claim {formatPrice(tokensPerParticipant, 18)} Free Market Shares
           </>
         )}
       </Button>

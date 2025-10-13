@@ -1454,6 +1454,7 @@ export function MarketV2BuyInterface({
                     <Input
                       ref={inputRef}
                       type="number"
+                      inputMode="decimal"
                       placeholder={`Enter amount (max ${MAX_SHARES})`}
                       value={amount}
                       onChange={(e) => {
@@ -1499,6 +1500,7 @@ export function MarketV2BuyInterface({
                       }}
                       max={MAX_SHARES}
                       className="w-full h-8 text-xs bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                      style={{ fontSize: "16px" }}
                     />
                   </div>
 

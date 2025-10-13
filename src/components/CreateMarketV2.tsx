@@ -712,6 +712,7 @@ export function CreateMarketV2() {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 maxLength={200}
+                style={{ fontSize: "16px" }}
               />
               <p className="text-sm text-gray-500">
                 {question.length}/200 characters
@@ -727,6 +728,7 @@ export function CreateMarketV2() {
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 maxLength={1000}
+                style={{ fontSize: "16px" }}
               />
               <p className="text-sm text-gray-500">
                 {description.length}/1000 characters
@@ -784,11 +786,13 @@ export function CreateMarketV2() {
                 <Input
                   id="duration"
                   type="number"
+                  inputMode="numeric"
                   min="1"
                   max="365"
                   placeholder="e.g., 7"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
+                  style={{ fontSize: "16px" }}
                 />
               </div>
 
@@ -803,10 +807,12 @@ export function CreateMarketV2() {
                 <Input
                   id="initialLiquidity"
                   type="number"
+                  inputMode="decimal"
                   min={MIN_INITIAL_LIQUIDITY}
                   placeholder="e.g., 5000"
                   value={initialLiquidity}
                   onChange={(e) => setInitialLiquidity(e.target.value)}
+                  style={{ fontSize: "16px" }}
                 />
               </div>
             </div>
@@ -879,6 +885,7 @@ export function CreateMarketV2() {
                         updateOption(index, "name", e.target.value)
                       }
                       maxLength={100}
+                      style={{ fontSize: "16px" }}
                     />
                   </div>
 
@@ -895,6 +902,7 @@ export function CreateMarketV2() {
                       }
                       rows={2}
                       maxLength={500}
+                      style={{ fontSize: "16px" }}
                     />
                   </div>
                 </div>
@@ -924,6 +932,7 @@ export function CreateMarketV2() {
                     <Input
                       id="maxParticipants"
                       type="number"
+                      inputMode="numeric"
                       min="1"
                       value={maxFreeParticipants}
                       onChange={(e) => {
@@ -938,6 +947,7 @@ export function CreateMarketV2() {
                         }
                       }}
                       placeholder="e.g., 3"
+                      style={{ fontSize: "16px" }}
                     />
                   </div>
 
@@ -946,6 +956,7 @@ export function CreateMarketV2() {
                     <Input
                       id="freeShares"
                       type="number"
+                      inputMode="decimal"
                       min="1"
                       value={freeSharesPerUser}
                       onChange={(e) => {
@@ -960,6 +971,7 @@ export function CreateMarketV2() {
                         }
                       }}
                       placeholder="e.g., 100"
+                      style={{ fontSize: "16px" }}
                     />
                   </div>
                 </div>
@@ -1038,35 +1050,47 @@ export function CreateMarketV2() {
               <div className="flex justify-between">
                 <span>Your Balance:</span>
                 <span
-                  className={
-                    userBalance <
-                    parseEther(
-                      marketType === MarketType.FREE_ENTRY
-                        ? (
-                            parseFloat(initialLiquidity) +
-                            parseFloat(freeSharesPerUser) *
-                              parseInt(maxFreeParticipants || "0")
-                          ).toString()
-                        : initialLiquidity
-                    )
-                      ? "text-red-500 font-medium"
-                      : "text-green-600 font-medium"
-                  }
+                  className={(() => {
+                    try {
+                      if (!initialLiquidity || initialLiquidity.trim() === "")
+                        return "text-green-600 font-medium";
+                      const requiredAmount =
+                        marketType === MarketType.FREE_ENTRY
+                          ? (
+                              parseFloat(initialLiquidity || "0") +
+                              parseFloat(freeSharesPerUser || "0") *
+                                parseInt(maxFreeParticipants || "0")
+                            ).toString()
+                          : initialLiquidity;
+                      return userBalance < parseEther(requiredAmount)
+                        ? "text-red-500 font-medium"
+                        : "text-green-600 font-medium";
+                    } catch {
+                      return "text-green-600 font-medium";
+                    }
+                  })()}
                 >
                   {(Number(userBalance) / 1e18).toLocaleString()} BUSTER
                 </span>
               </div>
 
-              {userBalance <
-                parseEther(
-                  marketType === MarketType.FREE_ENTRY
-                    ? (
-                        parseFloat(initialLiquidity) +
-                        parseFloat(freeSharesPerUser) *
-                          parseInt(maxFreeParticipants || "0")
-                      ).toString()
-                    : initialLiquidity
-                ) && (
+              {(() => {
+                try {
+                  if (!initialLiquidity || initialLiquidity.trim() === "")
+                    return false;
+                  const requiredAmount =
+                    marketType === MarketType.FREE_ENTRY
+                      ? (
+                          parseFloat(initialLiquidity || "0") +
+                          parseFloat(freeSharesPerUser || "0") *
+                            parseInt(maxFreeParticipants || "0")
+                        ).toString()
+                      : initialLiquidity;
+                  return userBalance < parseEther(requiredAmount);
+                } catch {
+                  return false;
+                }
+              })() && (
                 <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded mt-2">
                   <AlertTriangle className="h-4 w-4 text-red-500" />
                   <span className="text-red-700 dark:text-red-300 text-xs">
@@ -1098,9 +1122,12 @@ export function CreateMarketV2() {
                 disabled={
                   isSubmitting ||
                   sendCallsPending ||
+                  !isFormValidNoSideEffects() ||
                   (() => {
                     try {
-                      const liquidity = parseEther(initialLiquidity || "0");
+                      if (!initialLiquidity || initialLiquidity.trim() === "")
+                        return true;
+                      const liquidity = parseEther(initialLiquidity);
                       if (marketType === MarketType.FREE_ENTRY) {
                         if (
                           !freeSharesPerUser.trim() ||
@@ -1130,15 +1157,27 @@ export function CreateMarketV2() {
                   <>
                     <Plus className="h-4 w-4 mr-2" />
                     {(() => {
-                      const requiredApproval =
-                        marketType === MarketType.FREE_ENTRY
-                          ? parseEther(initialLiquidity) +
-                            parseEther(freeSharesPerUser) *
-                              BigInt(maxFreeParticipants)
-                          : parseEther(initialLiquidity);
-                      return requiredApproval > currentAllowance
-                        ? "Approve & Create Market"
-                        : "Create Market";
+                      try {
+                        if (
+                          !initialLiquidity ||
+                          initialLiquidity.trim() === ""
+                        ) {
+                          return "Create Market";
+                        }
+                        const requiredApproval =
+                          marketType === MarketType.FREE_ENTRY &&
+                          freeSharesPerUser.trim() &&
+                          maxFreeParticipants.trim()
+                            ? parseEther(initialLiquidity) +
+                              parseEther(freeSharesPerUser) *
+                                BigInt(maxFreeParticipants)
+                            : parseEther(initialLiquidity);
+                        return requiredApproval > currentAllowance
+                          ? "Approve & Create Market"
+                          : "Create Market";
+                      } catch {
+                        return "Create Market";
+                      }
                     })()}
                   </>
                 )}

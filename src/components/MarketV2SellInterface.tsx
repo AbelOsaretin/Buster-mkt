@@ -511,10 +511,12 @@ export function MarketV2SellInterface({
                 <Input
                   ref={inputRef}
                   type="number"
+                  inputMode="decimal"
                   placeholder="0.00"
                   value={sellAmount}
                   onChange={(e) => setSellAmount(e.target.value)}
                   className="pr-12 text-xs h-8"
+                  style={{ fontSize: "16px" }}
                   step="0.01"
                   min="0"
                   max={maxSellAmount.toString()}

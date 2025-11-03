@@ -92,7 +92,7 @@ export const config = createConfig({
     }),
     walletConnect({
       projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-      showQrModal: true,
+      showQrModal: false,
       metadata: {
         name: APP_NAME,
         description: "Policast - Social podcasting on Farcaster",

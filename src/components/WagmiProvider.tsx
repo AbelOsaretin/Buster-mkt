@@ -9,12 +9,38 @@ import { coinbaseWallet, metaMask, walletConnect } from "wagmi/connectors";
 import { useEffect, useState, createContext, useContext } from "react";
 import { useConnect, useAccount, useDisconnect } from "wagmi";
 import React from "react";
-
+import { createAppKit } from "@reown/appkit/react";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 // Constants
 
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!;
 const APP_NAME: string = "Policast";
 const APP_URL: string = process.env.NEXT_PUBLIC_URL!;
 const APP_ICON_URL: string = `${APP_URL}/icon.png`;
+
+const wagmiAdapter = new WagmiAdapter({
+  networks: [base],
+  projectId,
+});
+
+// Create AppKit instance
+export const appKit = createAppKit({
+  adapters: [wagmiAdapter],
+  networks: [base],
+  projectId,
+  metadata: {
+    name: "Policast",
+    description: "Policast - Social podcasting on Farcaster",
+    url: typeof window !== "undefined" ? window.location.origin : "",
+    icons: [`${APP_URL}/icon.png`],
+  },
+  features: {
+    email: true, // default to true
+    socials: ["farcaster"],
+    emailShowWallets: true, // default to true
+  },
+  allWallets: "SHOW", // default to SHOW
+});
 
 // Wallet context and types
 interface WalletContextType {
@@ -33,7 +59,7 @@ const WalletContext = createContext<WalletContextType | null>(null);
 export function useWallet(): WalletContextType {
   const context = useContext(WalletContext);
   if (!context) {
-    throw new Error("useWallet must be used within WalmiProvider");
+    throw new Error("useWallet must be used within WagmiProvider");
   }
   return context;
 }
@@ -91,14 +117,7 @@ export const config = createConfig({
       },
     }),
     walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-      showQrModal: true,
-      metadata: {
-        name: APP_NAME,
-        description: "Policast - Social podcasting on Farcaster",
-        url: APP_URL,
-        icons: [APP_ICON_URL],
-      },
+      projectId,
     }),
   ],
 });

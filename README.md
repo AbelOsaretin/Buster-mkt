@@ -106,8 +106,11 @@ Buster-mkt enables anyone to participate in decentralized prediction markets. Us
 ## Development
 
 - **Contracts:**
-  - Solidity contracts are in the `/contracts` directory (if present).
-  - Use Hardhat or Foundry for local testing and deployment.
+
+  - ~~Solidity contracts are in the `/contracts` directory (if present).~~
+
+  - ~~Use Hardhat or Foundry for local testing and deployment.~~
+
 - **Frontend:**
   - Next.js app in `/src/app`.
   - Components in `/src/components`.
